@@ -7,10 +7,11 @@ const nextConfig = {
   images: {
     domains: [],
   },
-  // Error handling
-  onError(err) {
-    console.error('Next.js build error:', err);
-  },
+  // Configure API routes
+  api: {
+    bodyParser: true,
+    responseLimit: '8mb',
+  }
 }
 
 module.exports = nextConfig 
