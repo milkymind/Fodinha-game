@@ -49,18 +49,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       estado: 'aguardando',
       initial_lives: lobby.lives,
       current_round: 0,
+      current_hand: 0,
       multiplicador: 1,
       mesa: [],
       palpites: {},
       vitorias: {},
       eliminados: [],
+      direction: 'up', // Track if we're going up or down in cards per hand
     };
   }
   
   const gameState = lobby.gameState;
   
+  console.log(`Starting round request received. Current state: ${gameState.estado}, Round: ${gameState.current_round}, Hand: ${gameState.current_hand}, Cards per hand: ${gameState.cartas}`);
+  
   if (gameState.estado !== 'aguardando' && gameState.estado !== 'round_over') {
     return res.status(400).json({ status: 'error', error: 'Cannot start round now' });
+  }
+  
+  // If we're in round_over and it's the final round of a hand, clear any trick winners
+  // and make sure we reset properly for the next hand
+  if (gameState.estado === 'round_over' && 
+      gameState.current_round === gameState.cartas) {
+    console.log('Final round completed, transitioning to next hand');
   }
   
   // Update dealer for next round (rotate)
@@ -77,37 +88,50 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const dealerIdx = gameState.players.indexOf(gameState.dealer);
   gameState.first_player = gameState.players[(dealerIdx + 1) % gameState.players.length];
   
-  // Reset game state for new round
+  // Reset game state for new round/hand
   gameState.multiplicador = 1;
   gameState.palpites = {};
   gameState.vitorias = {};
   gameState.mesa = [];
   gameState.eliminados = gameState.eliminados || [];
-  gameState.current_round = (gameState.current_round || 0) + 1;
   
-  // Calculate cards per player for this round
-  const maxCardsPerPlayer = Math.floor(SUITS.length * VALUES.length / gameState.players.length);
-  
-  // Handle crescendo/decrescendo logic
-  if (gameState.cartas === undefined) {
-    gameState.cartas = 1;
+  // Increment the hand counter if we're starting a new hand (not continuing a round)
+  if (gameState.estado === 'aguardando') {
+    gameState.current_hand = (gameState.current_hand || 0) + 1;
+    gameState.current_round = 1; // Reset round counter for new hand
   } else {
-    // If we're already at max cards, start decreasing
-    if (gameState.cartas === maxCardsPerPlayer) {
-      gameState.cartas--;
-    } 
-    // If we're at 1 card, start increasing
-    else if (gameState.cartas === 1) {
-      gameState.cartas = 2;
-    }
-    // Otherwise continue the trend (increasing or decreasing)
-    else {
-      const isIncreasing = gameState.current_round <= Math.ceil(maxCardsPerPlayer / 2);
-      gameState.cartas = isIncreasing ? gameState.cartas + 1 : gameState.cartas - 1;
-      
-      // Cap at max cards
-      if (gameState.cartas > maxCardsPerPlayer) {
-        gameState.cartas = maxCardsPerPlayer;
+    // If we're in a round_over state, we're continuing with the same hand
+    gameState.current_round = (gameState.current_round || 0) + 1;
+  }
+  
+  // Calculate the maximum number of cards per player
+  const maxCardsPerPlayer = 5; // Maximum of 5 cards per player in a hand
+  
+  // Implement the wave pattern for cards per hand
+  if (!gameState.direction) {
+    gameState.direction = 'up';
+  }
+  
+  // If we're starting a new hand, calculate the cards per player
+  if (gameState.estado === 'aguardando') {
+    if (gameState.cartas === undefined) {
+      // First hand always starts with 1 card
+      gameState.cartas = 1;
+    } else {
+      if (gameState.direction === 'up') {
+        gameState.cartas++;
+        // If we hit the max, change direction
+        if (gameState.cartas >= maxCardsPerPlayer) {
+          gameState.cartas = maxCardsPerPlayer;
+          gameState.direction = 'down';
+        }
+      } else {
+        gameState.cartas--;
+        // If we hit the min, change direction
+        if (gameState.cartas <= 1) {
+          gameState.cartas = 1;
+          gameState.direction = 'up';
+        }
       }
     }
   }

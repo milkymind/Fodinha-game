@@ -12,6 +12,7 @@ interface GameState {
   palpites: { [key: number]: number };
   initial_lives: number;
   current_round?: number;
+  current_hand?: number;
   current_player_idx: number;
   ordem_jogada: number[];
   multiplicador: number;
@@ -22,6 +23,8 @@ interface GameState {
   first_player?: number;
   cartas: number;
   eliminados: number[];
+  direction?: 'up' | 'down';
+  original_maos?: { [key: number]: string[] };
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -92,6 +95,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ...gameState.players.slice(firstPlayerIdx),
         ...gameState.players.slice(0, firstPlayerIdx)
       ];
+    }
+    
+    // For one-card hands, we need to hide each player's own card
+    // but allow them to see other players' cards
+    if (gameState.cartas === 1) {
+      // Store original cards for later reference (needed when a player plays their card)
+      gameState.original_maos = JSON.parse(JSON.stringify(gameState.maos));
+      
+      // For now, we've already shown other players' cards during betting phase
+      // in the Game component, so no need to modify the state here
     }
   }
   
