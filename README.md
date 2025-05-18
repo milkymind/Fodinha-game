@@ -1,50 +1,78 @@
-# Fodinha Card Game
+# ♠️ Fodinha Card Game
 
-A web-based implementation of the Brazilian card game "Fodinha" built with Next.js.
+A modern web implementation of the traditional Brazilian card game **Fodinha** (also known as *Oh Hell!* or *Truco Paulista*), built with Next.js and React.
 
-## About the Game
+---
 
-Fodinha is a traditional Brazilian card game also known as "Truco Mineiro Simplificado". Players make bets on how many tricks they'll win in each round, and lose lives when their bets don't match their performance.
+## 🎮 How to Play Fodinha
 
-### Basic Rules
-- Players start with a fixed number of lives (usually 3)
-- In the first round, each player receives 1 card
-- In each subsequent round, the number of cards increases
-- Players bet how many tricks they'll win
-- Lose lives equal to the difference between your bet and actual tricks won
-- First-round special rule: You can see other players' cards, but not your own!
+Fodinha is a **round-based trick-taking card game** with betting mechanics and elimination by lives. It's strategic, social, and gets more intense as the rounds progress.
 
-## Deployment Options
+### 🧠 Objective
+Predict the number of **tricks** (round wins) you'll win each round. Get it wrong, and you lose lives.
 
-### 1. Vercel (Recommended)
+---
 
-The easiest way to deploy this game:
+### 🃏 Game Rules
 
-1. Create a GitHub repository and push this code
-2. Sign up at [vercel.com](https://vercel.com)
-3. Connect your GitHub account
-4. Import this repository
-5. Click Deploy
+#### 🪙 Starting Conditions
+- Each player starts with **3 lives**
+- In round 1, each player receives **1 card**
+- The number of cards **increases each round**, then decreases again (like a bell curve)
+- A random card determines the **manilha** (trump suit) each round
 
-The game will use in-memory storage when deployed on Vercel. Game states will reset when the Vercel instance restarts.
+#### 🔮 Betting Phase
+- Before playing, players bet how many tricks they expect to win
+- Bets are made one player at a time
+- **The last player to bet cannot guess the exact number needed to equal all tricks combined** (to prevent balanced bets)
 
-### 2. Self-hosting
+#### ♠️ Playing Cards
+- Players take turns playing one card per trick
+- The **highest card** wins the trick
+- Manilha (trump) cards **beat all other cards**, regardless of suit
+- If two cards tie in value, **both are cancelled**
+- If a trick is cancelled and nobody wins it, the **next trick is worth double**
 
-For persistent storage, deploy to your own server:
+#### 🎯 Scoring & Lives
+- After all tricks are played, compare the number of tricks each player won to their bet
+- For each trick you miss your bet by, **you lose that many lives**
+- A player with **0 lives is eliminated**
+- The last remaining player wins
 
-1. Install Node.js on your server
-2. Clone your repository
-3. Run `npm install`
-4. Build the app: `npm run build`
-5. Start the server: `npm run start`
+#### 👁️ Special First-Round Rule
+- In round 1, **you cannot see your own card**
+- However, you **can see all other players’ cards**
 
-## Development
+---
+
+## 🚀 Deployment Options
+
+### ✅ Option 1: Deploy to Vercel (Recommended)
+
+1. Fork or clone this repository to your GitHub account
+2. Sign up at [https://vercel.com](https://vercel.com)
+3. Connect your GitHub account to Vercel
+4. Import this project repository
+5. Click **Deploy**
+
+📦 Note: The game uses in-memory storage. This means game data resets if the Vercel instance restarts.
+
+### 🖥️ Option 2: Run Locally
+
+#### Requirements
+- Node.js installed on your machine
+  
+#### Steps
 
 ```bash
+# Clone the repo
+git clone https://github.com/YOUR_USERNAME/fodinha-card-game.git
+cd fodinha-card-game
+
 # Install dependencies
 npm install
 
-# Run development server
+# Run the development server
 npm run dev
 
 # Build for production
@@ -54,23 +82,37 @@ npm run build
 npm run start
 ```
 
-## Game Features
+---
 
-- Create and join game lobbies
-- Custom player names
-- Real-time game state updates
-- Visual card animations
-- Round progress tracking
-- First-round special rule implementation (hidden cards)
-- Trick winner notifications
+## ✨ Game Features
+- PokerStars-style visual interface
+- Animated card dealing, flipping, and discarding
+- Player HUDs with:
+  - Player names
+  - Current bets
+  - Lives remaining
+  - Round wins
+- Real-time round progress tracking
+- Manilha (trump card) system
+- Trick winner resolution
+- Card tie logic & double trick rule
+- Hidden self-card in round 1
+- Room-based matchmaking system (coming soon)
 
-## Technologies
+---
 
-- Next.js
-- React
-- TypeScript
-- lowdb (for data persistence)
+## ⚙️ Tech Stack
+- Next.js – Framework for React and fullstack logic
+- React – UI library
+- TypeScript – Type safety
+- Tailwind CSS – Styling and layout
+- Framer Motion – Smooth animations
+- lowdb – Lightweight file-based JSON database for storage
 
-## License
+---
 
-MIT
+## 📄 License
+
+MIT License. Feel free to fork, remix, and improve the game.
+
+Made with ❤️ for fans of Brazilian card games and good old-fashioned mind games.
