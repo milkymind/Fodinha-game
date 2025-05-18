@@ -18,6 +18,7 @@ interface GameState {
   palpites?: { [key: number]: number };
   initial_lives: number;
   current_round?: number;
+  current_hand?: number;
   current_player_idx?: number;
   ordem_jogada?: number[];
   multiplicador?: number;
@@ -28,7 +29,9 @@ interface GameState {
   first_player?: number;
   cartas?: number;
   eliminados?: number[];
+  last_round_winner?: number;
   last_trick_winner?: number;
+  round_over_timestamp?: number;
 }
 
 export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
@@ -39,7 +42,10 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
   const [waitingMsg, setWaitingMsg] = useState<string>('');
   const [lastPlayedCard, setLastPlayedCard] = useState<{playerId: number, card: string} | null>(null);
   const [winnerMessage, setWinnerMessage] = useState<string | null>(null);
-  const [prevTrickWinner, setPrevTrickWinner] = useState<number | null>(null);
+  const [prevRoundWinner, setPrevRoundWinner] = useState<number | null>(null);
+  const [roundEndMessage, setRoundEndMessage] = useState<string | null>(null);
+  const [prevRound, setPrevRound] = useState<number | null>(null);
+  const [prevHand, setPrevHand] = useState<number | null>(null);
 
   // Fetch game state periodically
   useEffect(() => {
@@ -48,12 +54,38 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
         const response = await fetch(`/api/game-state/${gameId}`);
         const data = await response.json();
         if (data.status === 'success') {
-          // Check if there's a new trick winner to announce
-          if (data.game_state.last_trick_winner && 
-              data.game_state.last_trick_winner !== prevTrickWinner) {
-            const winnerName = data.game_state.player_names[data.game_state.last_trick_winner];
-            setWinnerMessage(`${winnerName} won the trick!`);
-            setPrevTrickWinner(data.game_state.last_trick_winner);
+          const newGameState = data.game_state;
+          
+          // Check for round changes
+          if (prevRound !== null && 
+              newGameState.current_round !== prevRound &&
+              newGameState.current_hand === prevHand) {
+            // Round has changed within the same hand
+            setRoundEndMessage(`Round ${prevRound} complete! Starting round ${newGameState.current_round}`);
+            
+            // Clear the message after 3 seconds
+            setTimeout(() => {
+              setRoundEndMessage(null);
+            }, 3000);
+          }
+          
+          // Check if a new hand has started
+          if (prevHand !== null && newGameState.current_hand !== prevHand) {
+            // New hand has started
+            setRoundEndMessage(`Hand ${prevHand + 1} complete! Starting hand ${newGameState.current_hand + 1} with ${newGameState.cartas} cards per player`);
+            
+            // Clear the message after 3 seconds
+            setTimeout(() => {
+              setRoundEndMessage(null);
+            }, 3000);
+          }
+          
+          // Check if there's a new round winner to announce
+          const roundWinner = newGameState.last_round_winner || newGameState.last_trick_winner;
+          if (roundWinner && roundWinner !== prevRoundWinner) {
+            const winnerName = newGameState.player_names[roundWinner];
+            setWinnerMessage(`${winnerName} won the round!`);
+            setPrevRoundWinner(roundWinner);
             
             // Clear the message after 3 seconds
             setTimeout(() => {
@@ -61,8 +93,13 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
             }, 3000);
           }
           
-          setGameState(data.game_state);
-          updateGameStatus(data.game_state);
+          // Update game state
+          setGameState(newGameState);
+          updateGameStatus(newGameState);
+          
+          // Save current round and hand to detect changes
+          setPrevRound(newGameState.current_round || null);
+          setPrevHand(newGameState.current_hand || null);
         }
       } catch (error) {
         console.error('Error fetching game state:', error);
@@ -77,46 +114,82 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
 
     // Clean up interval on unmount
     return () => clearInterval(interval);
-  }, [gameId, prevTrickWinner]);
+  }, [gameId, prevRoundWinner, prevRound, prevHand]);
 
   // Update game status message based on state
   const updateGameStatus = (state: GameState) => {
     if (state.estado === 'aguardando') {
-      setGameStatus('Aguardando início da rodada');
+      setGameStatus('Waiting to start the next hand');
       setWaitingMsg('');
     } else if (state.estado === 'apostas') {
       const currentPlayerIdx = state.current_player_idx ?? 0;
       const currentPlayer = state.ordem_jogada?.[currentPlayerIdx];
       if (currentPlayer !== undefined && currentPlayer === playerId) {
-        setGameStatus('É a sua vez de apostar!');
+        setGameStatus('It\'s your turn to place a bet!');
         setWaitingMsg('');
       } else if (currentPlayer !== undefined) {
-        setGameStatus(`Aguardando aposta de ${state.player_names[currentPlayer]}`);
-        setWaitingMsg('Aguardando outros jogadores apostarem...');
+        setGameStatus(`Waiting for ${state.player_names[currentPlayer]} to place a bet`);
+        setWaitingMsg('Waiting for other players to place bets...');
       } else {
-        setGameStatus('Aguardando apostas');
+        setGameStatus('Waiting for bets');
         setWaitingMsg('');
       }
     } else if (state.estado === 'jogando') {
       const currentPlayerIdx = state.current_player_idx ?? 0;
       const currentPlayer = state.ordem_jogada?.[currentPlayerIdx];
       if (currentPlayer !== undefined && currentPlayer === playerId) {
-        setGameStatus('É a sua vez de jogar uma carta!');
+        setGameStatus('It\'s your turn to play a card!');
         setWaitingMsg('');
       } else if (currentPlayer !== undefined) {
-        setGameStatus(`Aguardando ${state.player_names[currentPlayer]} jogar`);
-        setWaitingMsg('Aguardando outros jogadores jogarem...');
+        setGameStatus(`Waiting for ${state.player_names[currentPlayer]} to play a card`);
+        setWaitingMsg('Waiting for other players to play...');
       } else {
-        setGameStatus('Aguardando jogadas');
+        setGameStatus('Waiting for plays');
         setWaitingMsg('');
+      }
+    } else if (state.estado === 'round_over') {
+      if (state.current_round && state.cartas && state.current_round < state.cartas) {
+        // Between rounds in a multi-card hand
+        const roundWinner = state.last_round_winner || state.last_trick_winner;
+        if (roundWinner) {
+          const winnerName = state.player_names[roundWinner];
+          setGameStatus(`Round ${state.current_round} complete! ${winnerName} won this round.`);
+          
+          // The next player to play is after the dealer (not the round winner)
+          if (state.dealer && state.first_player) {
+            const firstPlayerName = state.player_names[state.first_player];
+            setWaitingMsg(`Starting next round shortly... ${firstPlayerName} will play first.`);
+          } else {
+            setWaitingMsg('Starting next round shortly...');
+          }
+        } else {
+          setGameStatus(`Round ${state.current_round} complete!`);
+          setWaitingMsg('Starting next round shortly...');
+        }
+      } else {
+        // Between hands
+        setGameStatus('Hand complete!');
+        
+        // Show results summary
+        let resultsMsg = 'Results: ';
+        for (const playerId of state.players) {
+          if (!state.eliminados?.includes(playerId)) {
+            const name = state.player_names[playerId];
+            const bet = state.palpites?.[playerId] || 0;
+            const wins = state.vitorias?.[playerId] || 0;
+            const lives = state.vidas?.[playerId] || 0;
+            resultsMsg += `${name}: bet ${bet}, won ${wins}, lives ${lives} | `;
+          }
+        }
+        setWaitingMsg(resultsMsg + 'Waiting to start the next hand...');
       }
     } else if (state.estado === 'terminado') {
       const winners = state.players.filter(p => !state.eliminados?.includes(p));
       if (winners.length === 1) {
         const winner = winners[0];
-        setGameStatus(`Jogo finalizado! ${state.player_names[winner]} venceu!`);
+        setGameStatus(`Game over! ${state.player_names[winner]} won!`);
       } else {
-        setGameStatus('Jogo finalizado!');
+        setGameStatus('Game over!');
       }
       setWaitingMsg('');
     }
@@ -134,11 +207,11 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
         setGameState(data.game_state);
         updateGameStatus(data.game_state);
       } else {
-        setError(data.error || 'Erro ao iniciar rodada');
+        setError(data.error || 'Error starting round');
       }
     } catch (error) {
       console.error('Error starting round:', error);
-      setError('Erro de conexão');
+      setError('Connection error');
     }
   };
 
@@ -164,11 +237,11 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
         updateGameStatus(data.game_state);
         setBet('');
       } else {
-        setError(data.error || 'Erro ao fazer aposta');
+        setError(data.error || 'Error making bet');
       }
     } catch (error) {
       console.error('Error making bet:', error);
-      setError('Erro de conexão');
+      setError('Connection error');
     }
   };
 
@@ -201,12 +274,12 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
           setLastPlayedCard(null);
         }, 1000);
       } else {
-        setError(data.error || 'Erro ao jogar carta');
+        setError(data.error || 'Error playing card');
         setLastPlayedCard(null);
       }
     } catch (error) {
       console.error('Error playing card:', error);
-      setError('Erro de conexão');
+      setError('Connection error');
       setLastPlayedCard(null);
     }
   };
@@ -247,8 +320,8 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
     return gameState.ordem_jogada[currentPlayerIdx] === playerId;
   };
 
-  // Show card count info for first round
-  const isFirstRound = gameState?.cartas === 1;
+  // Check if this is a one-card hand
+  const isOneCardHand = gameState?.cartas === 1;
 
   // Handler for new game (for now, just leave game)
   const handleNewGame = () => {
@@ -260,8 +333,13 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
       <div className={styles.header}>
         <h2>Game Room: {gameId}</h2>
         <div className={styles.gameInfo}>
-          <p>Round: {gameState?.current_round || 0}</p>
+          {gameState?.current_hand && (
+            <p className={styles.handInfo}>Hand: {gameState.current_hand + 1}</p>
+          )}
           <p>Cards per player: {gameState?.cartas || 1}</p>
+          {gameState?.current_round && (
+            <p className={styles.roundInfo}>Round: {gameState.current_round} of {gameState?.cartas || 1}</p>
+          )}
           {gameState?.multiplicador && gameState.multiplicador > 1 && (
             <p className={styles.multiplier}>
               Multiplier: x{gameState.multiplicador}
@@ -290,6 +368,12 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
           <p>{winnerMessage}</p>
         </div>
       )}
+      
+      {roundEndMessage && (
+        <div className={styles.roundEndMessage}>
+          <p>{roundEndMessage}</p>
+        </div>
+      )}
 
       {error && (
         <div className={styles.errorMessage}>
@@ -297,9 +381,9 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
         </div>
       )}
 
-      {isFirstRound && gameState?.estado === 'jogando' && (
+      {isOneCardHand && (
         <div className={styles.infoMessage}>
-          <p>First round rule: You can only see other players' cards!</p>
+          <p>One-card hand rule: You can only see other players' cards!</p>
         </div>
       )}
 
@@ -313,10 +397,11 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
                 isPlayerTurn() && gameState.ordem_jogada?.[gameState.current_player_idx || 0] === id 
                   ? styles.activePlayer 
                   : ''
-              }`}
+              } ${(gameState.last_round_winner === id || gameState.last_trick_winner === id) ? styles.lastWinner : ''}`}
             >
               <div className={styles.playerName}>
                 {gameState.player_names[id]} {id === playerId ? '(You)' : ''}
+                {gameState.dealer === id && <span className={styles.dealerLabel}> 🎲</span>}
               </div>
               <div className={styles.playerStats}>
                 <div className={styles.playerLives}>
@@ -362,6 +447,34 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
           </div>
         )}
 
+        {/* Other players' cards in one-card hand */}
+        {isOneCardHand && gameState?.estado === 'apostas' && gameState?.maos && (
+          <div className={styles.otherPlayersCards}>
+            <h3>Other Players' Cards</h3>
+            <div className={styles.tableCards}>
+              {gameState.players
+                .filter(id => id !== playerId)
+                .map((id) => 
+                  gameState.maos && gameState.maos[id] && gameState.maos[id].length > 0 ? (
+                    <div key={id} className={styles.playedCardContainer}>
+                      <div className={`${styles.card} ${getCardColorClass(gameState.maos[id][0])}`}>
+                        <div className={styles.cardContent}>
+                          <span className={styles.cardValue}>{formatCard(gameState.maos[id][0]).value}</span>
+                          <span className={`${styles.cardSuit} ${getSuitClass(gameState.maos[id][0])}`}>
+                            {formatCard(gameState.maos[id][0]).suit}
+                          </span>
+                        </div>
+                      </div>
+                      <div className={styles.playerLabel}>
+                        {gameState.player_names[id]}
+                      </div>
+                    </div>
+                  ) : null
+              )}
+            </div>
+          </div>
+        )}
+
         {gameState?.mesa && gameState.mesa.length > 0 && (
           <div className={styles.playedCards}>
             <h3>Played Cards</h3>
@@ -392,7 +505,7 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
             onClick={startRound} 
             className={styles.actionButton}
           >
-            Start Round
+            Start New Hand
           </button>
         </div>
       )}
@@ -419,9 +532,9 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
         </div>
       )}
 
-      {/* Only show player's hand if it's not the first round or if the game is not in the playing state */}
+      {/* Only show player's hand if it's not a one-card hand */}
       {gameState?.maos && gameState.maos[playerId] && gameState.maos[playerId].length > 0 && 
-       ((gameState.cartas ?? 0) > 1 || gameState.estado !== 'jogando') && (
+       !isOneCardHand && (
         <div className={styles.handContainer}>
           <h3>Your Hand</h3>
           <div className={styles.cards}>
@@ -446,7 +559,8 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
         </div>
       )}
 
-      {isFirstRound && gameState?.estado === 'jogando' && gameState?.maos && gameState.maos[playerId] && (
+      {/* For one-card hand during playing phase, show hidden card */}
+      {isOneCardHand && gameState?.estado === 'jogando' && gameState?.maos && gameState.maos[playerId] && (
         <div className={styles.handContainer}>
           <h3>Your Hidden Card</h3>
           <div className={styles.cards}>
@@ -462,7 +576,7 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
               </div>
             </button>
           </div>
-          <p className={styles.cardHint}>You can't see your card in the first round!</p>
+          <p className={styles.cardHint}>You can't see your card in the one-card hand!</p>
         </div>
       )}
 

@@ -31,6 +31,16 @@
   margin-bottom: 2rem;
 }
 
+.handInfo {
+  font-weight: bold;
+  color: #28a745;
+}
+
+.roundInfo {
+  font-weight: bold;
+  color: #007bff;
+}
+
 .actionButton {
   background-color: #007bff;
   color: white;
@@ -184,9 +194,19 @@
   border-color: #28a745;
 }
 
+.playerCard.lastWinner {
+  border-color: #ffc107;
+  box-shadow: 0 0 10px rgba(255, 193, 7, 0.5);
+}
+
 .playerName {
   font-weight: bold;
   margin-bottom: 0.5rem;
+}
+
+.dealerLabel {
+  font-size: 1.2em;
+  color: #6c757d;
 }
 
 .playerStats {
@@ -250,29 +270,32 @@
 }
 
 .cardLabel {
-  margin-top: 0.5rem;
-  font-weight: bold;
   color: white;
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
 }
 
 .manilhaContainer {
   background-color: rgba(255,255,255,0.2);
-  border-radius: 8px;
   padding: 0.5rem 1rem;
+  border-radius: 8px;
   margin-top: 1rem;
 }
 
 .manilhaInfo {
-  font-weight: bold;
   color: white;
+  font-weight: bold;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
 }
 
 .manilhaValue {
-  padding: 0.2rem 0.5rem;
-  background-color: white;
+  background-color: rgba(255,255,255,0.8);
+  color: #333;
+  padding: 0.25rem 0.5rem;
   border-radius: 4px;
   margin-left: 0.5rem;
-  font-size: 1.2rem;
+  font-weight: bold;
 }
 
 .playedCards {
@@ -283,13 +306,14 @@
   color: white;
   text-align: center;
   margin-bottom: 1rem;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
 }
 
 .tableCards {
   display: flex;
-  flex-wrap: wrap;
   justify-content: center;
   gap: 2rem;
+  flex-wrap: wrap;
 }
 
 .playedCardContainer {
@@ -297,42 +321,41 @@
 }
 
 .playerLabel {
-  margin-top: 0.5rem;
   color: white;
-  font-weight: bold;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
 }
 
-/* Card animation */
 .lastPlayed {
-  animation: dealCard 0.5s ease-out;
+  animation: dealCard 1s ease-out;
 }
 
 @keyframes dealCard {
   0% {
-    transform: scale(0.5) translateY(-100px);
+    transform: translateY(-100px) rotate(-10deg);
     opacity: 0;
   }
   100% {
-    transform: scale(1) translateY(0);
+    transform: translateY(0) rotate(0deg);
     opacity: 1;
   }
 }
 
 .betsList {
   display: flex;
-  flex-wrap: wrap;
   gap: 1rem;
+  flex-wrap: wrap;
   justify-content: center;
 }
 
 .betItem {
   background-color: white;
-  border-radius: 4px;
+  border-radius: 8px;
   padding: 0.5rem 1rem;
   display: flex;
+  gap: 0.5rem;
   align-items: center;
-  gap: 1rem;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
 .betPlayer {
@@ -341,41 +364,46 @@
 
 .betValue {
   background-color: #e9ecef;
-  padding: 0.2rem 0.5rem;
-  border-radius: 4px;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-weight: bold;
 }
 
 .gameOver {
-  background-color: rgba(0,0,0,0.05);
-  border-radius: 8px;
+  background-color: rgba(0,0,0,0.8);
+  color: white;
   padding: 2rem;
-  margin: 2rem 0;
+  border-radius: 8px;
   text-align: center;
 }
 
 .finalResults {
-  margin: 2rem 0;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 1rem;
+  margin: 1.5rem 0;
 }
 
 .resultRow {
   display: flex;
   justify-content: space-between;
-  padding: 0.5rem;
+  padding: 0.5rem 1rem;
   border-radius: 4px;
+  background-color: rgba(255,255,255,0.1);
 }
 
 .resultRow.winner {
-  background-color: #d4edda;
-  color: #155724;
+  background-color: rgba(40,167,69,0.3);
+  border-left: 4px solid #28a745;
 }
 
 .resultRow.eliminated {
-  background-color: #f8d7da;
-  color: #721c24;
+  background-color: rgba(220,53,69,0.3);
+  border-left: 4px solid #dc3545;
 }
 
 .resultName {
@@ -383,69 +411,87 @@
 }
 
 .gameStatus {
-  background-color: #cfe2ff;
-  color: #084298;
-  padding: 0.75rem;
-  border-radius: 4px;
-  margin: 1rem 0;
+  background-color: #007bff;
+  color: white;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
   text-align: center;
   font-weight: bold;
+  animation: fadeInOut 1s ease-in-out;
 }
 
 .errorMessage {
-  background-color: #f8d7da;
-  color: #721c24;
-  padding: 0.75rem;
-  border-radius: 4px;
-  margin: 1rem 0;
+  background-color: #dc3545;
+  color: white;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
   text-align: center;
+  font-weight: bold;
+  animation: fadeInOut 1s ease-in-out;
 }
 
 .waitingMsg {
-  background-color: #fff3cd;
-  color: #856404;
-  padding: 0.75rem;
-  border-radius: 4px;
-  margin: 1rem 0;
+  background-color: #6c757d;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
   text-align: center;
   font-style: italic;
+  font-size: 0.9rem;
 }
 
 .winnerMessage {
-  background-color: #d4edda;
-  color: #155724;
-  padding: 0.75rem;
-  border-radius: 4px;
-  margin: 1rem 0;
+  background-color: #28a745;
+  color: white;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
   text-align: center;
   font-weight: bold;
-  animation: fadeInOut 3s ease-in-out;
+  animation: fadeInOut 1s ease-in-out;
+}
+
+.roundEndMessage {
+  background-color: #ffc107;
+  color: #212529;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  text-align: center;
+  font-weight: bold;
+  animation: fadeInOut 1s ease-in-out;
+  box-shadow: 0 2px 10px rgba(255, 193, 7, 0.5);
 }
 
 .infoMessage {
-  background-color: #cce5ff;
-  color: #004085;
-  padding: 0.75rem;
-  border-radius: 4px;
-  margin: 1rem 0;
+  background-color: #17a2b8;
+  color: white;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
   text-align: center;
-  font-style: italic;
+  font-weight: bold;
 }
 
 @keyframes fadeInOut {
-  0% { opacity: 0; }
-  15% { opacity: 1; }
-  85% { opacity: 1; }
-  100% { opacity: 0; }
+  0% { opacity: 0; transform: translateY(-10px); }
+  10% { opacity: 1; transform: translateY(0); }
+  90% { opacity: 1; }
+  100% { opacity: 0.9; }
 }
 
 .multiplier {
+  background-color: #ffc107;
+  color: #212529;
   font-weight: bold;
-  color: #dc3545;
-  font-size: 1.1rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  display: inline-block;
 }
 
-/* Suit specific styles */
 .heartSuit, .diamondSuit {
   color: #dc3545;
 }
