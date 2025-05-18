@@ -1,0 +1,455 @@
+.gameContainer {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.leaveButton {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.leaveButton:hover {
+  background-color: #c82333;
+}
+
+.gameInfo {
+  background-color: #f8f9fa;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 2rem;
+}
+
+.actionButton {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  margin: 0.5rem;
+}
+
+.actionButton:hover {
+  background-color: #0056b3;
+}
+
+.tableInfo {
+  background-color: #e9ecef;
+  padding: 1rem;
+  border-radius: 8px;
+  margin: 2rem 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.handContainer {
+  margin: 2rem 0;
+}
+
+.cards {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.card {
+  width: 80px;
+  height: 120px;
+  border: 2px solid #333;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  background-color: white;
+  cursor: pointer;
+  transition: transform 0.3s, box-shadow 0.3s;
+  position: relative;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  overflow: hidden;
+}
+
+.card:hover {
+  transform: translateY(-10px);
+  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+}
+
+.playable:hover {
+  transform: translateY(-15px) rotate(5deg);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+}
+
+.hiddenCard {
+  background: linear-gradient(135deg, #4c8daa 25%, #336699 25%, #336699 50%, #4c8daa 50%, #4c8daa 75%, #336699 75%);
+  background-size: 20px 20px;
+  cursor: pointer;
+}
+
+.cardBackContent {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 2rem;
+  font-weight: bold;
+  text-shadow: 0 0 5px rgba(0,0,0,0.5);
+}
+
+.cardHint {
+  text-align: center;
+  font-style: italic;
+  color: #666;
+  margin-top: 1rem;
+}
+
+.betContainer {
+  margin: 2rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  justify-content: center;
+  align-items: center;
+}
+
+.betControls {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.betInput {
+  padding: 0.5rem;
+  font-size: 1rem;
+  width: 80px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+}
+
+.betsInfo {
+  background-color: #f8f9fa;
+  padding: 1rem;
+  border-radius: 8px;
+  margin: 2rem 0;
+}
+
+.playersList {
+  margin: 2rem 0;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.playersList h3 {
+  margin-top: 0;
+}
+
+.playersGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.playerCard {
+  background-color: #fff;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 0.75rem;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.playerCard.currentPlayer {
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.playerCard.activePlayer {
+  transform: translateY(-5px);
+  box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+  border-color: #28a745;
+}
+
+.playerName {
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+}
+
+.playerStats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+/* Card styling */
+.cardContent {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  padding: 5px;
+  box-sizing: border-box;
+}
+
+.cardValue {
+  position: absolute;
+  left: 5px;
+  top: 5px;
+  font-size: 1.2rem;
+  font-weight: bold;
+}
+
+.cardSuit {
+  font-size: 2.5rem;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.redCard .cardValue,
+.redCard .cardSuit {
+  color: #dc3545;
+}
+
+.blackCard .cardValue,
+.blackCard .cardSuit {
+  color: #212529;
+}
+
+/* Game table */
+.gameTable {
+  background-color: #3a7e4f;
+  border-radius: 20px;
+  padding: 2rem;
+  margin: 2rem 0;
+  min-height: 300px;
+  position: relative;
+  box-shadow: inset 0 0 20px rgba(0,0,0,0.3);
+}
+
+.centerCardContainer {
+  position: relative;
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.cardLabel {
+  margin-top: 0.5rem;
+  font-weight: bold;
+  color: white;
+}
+
+.manilhaContainer {
+  background-color: rgba(255,255,255,0.2);
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  margin-top: 1rem;
+}
+
+.manilhaInfo {
+  font-weight: bold;
+  color: white;
+}
+
+.manilhaValue {
+  padding: 0.2rem 0.5rem;
+  background-color: white;
+  border-radius: 4px;
+  margin-left: 0.5rem;
+  font-size: 1.2rem;
+}
+
+.playedCards {
+  margin-top: 2rem;
+}
+
+.playedCards h3 {
+  color: white;
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.tableCards {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2rem;
+}
+
+.playedCardContainer {
+  text-align: center;
+}
+
+.playerLabel {
+  margin-top: 0.5rem;
+  color: white;
+  font-weight: bold;
+}
+
+/* Card animation */
+.lastPlayed {
+  animation: dealCard 0.5s ease-out;
+}
+
+@keyframes dealCard {
+  0% {
+    transform: scale(0.5) translateY(-100px);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+.betsList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.betItem {
+  background-color: white;
+  border-radius: 4px;
+  padding: 0.5rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.betPlayer {
+  font-weight: bold;
+}
+
+.betValue {
+  background-color: #e9ecef;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+.gameOver {
+  background-color: rgba(0,0,0,0.05);
+  border-radius: 8px;
+  padding: 2rem;
+  margin: 2rem 0;
+  text-align: center;
+}
+
+.finalResults {
+  margin: 2rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.resultRow {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem;
+  border-radius: 4px;
+}
+
+.resultRow.winner {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.resultRow.eliminated {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.resultName {
+  font-weight: bold;
+}
+
+.gameStatus {
+  background-color: #cfe2ff;
+  color: #084298;
+  padding: 0.75rem;
+  border-radius: 4px;
+  margin: 1rem 0;
+  text-align: center;
+  font-weight: bold;
+}
+
+.errorMessage {
+  background-color: #f8d7da;
+  color: #721c24;
+  padding: 0.75rem;
+  border-radius: 4px;
+  margin: 1rem 0;
+  text-align: center;
+}
+
+.waitingMsg {
+  background-color: #fff3cd;
+  color: #856404;
+  padding: 0.75rem;
+  border-radius: 4px;
+  margin: 1rem 0;
+  text-align: center;
+  font-style: italic;
+}
+
+.winnerMessage {
+  background-color: #d4edda;
+  color: #155724;
+  padding: 0.75rem;
+  border-radius: 4px;
+  margin: 1rem 0;
+  text-align: center;
+  font-weight: bold;
+  animation: fadeInOut 3s ease-in-out;
+}
+
+.infoMessage {
+  background-color: #cce5ff;
+  color: #004085;
+  padding: 0.75rem;
+  border-radius: 4px;
+  margin: 1rem 0;
+  text-align: center;
+  font-style: italic;
+}
+
+@keyframes fadeInOut {
+  0% { opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.multiplier {
+  font-weight: bold;
+  color: #dc3545;
+  font-size: 1.1rem;
+}
+
+/* Suit specific styles */
+.heartSuit, .diamondSuit {
+  color: #dc3545;
+}
+
+.clubSuit, .spadeSuit {
+  color: #212529;
+} 
