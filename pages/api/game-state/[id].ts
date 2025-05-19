@@ -3,102 +3,85 @@ import { getLobby, setLobby } from '../persistent-store';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { id } = req.query;
-  const lobby = await getLobby(id as string);
   
-  if (!lobby) {
-    return res.status(404).json({ status: 'error', error: 'Game not found' });
-  }
-  
-  if (!lobby.gameState) {
-    return res.status(404).json({ status: 'error', error: 'Game state not found' });
-  }
-  
-  // Check if we need to transition from round_over to jogando for multi-round hands
-  if (lobby.gameState.estado === 'round_over' && 
-      lobby.gameState.current_round && 
-      lobby.gameState.cartas && 
-      lobby.gameState.current_round < lobby.gameState.cartas) {
+  try {
+    const lobby = await getLobby(id as string);
     
-    // If it's been at least 2 seconds since the round ended, start a new round
-    const now = Date.now();
-    if (lobby.gameState.round_over_timestamp && now - lobby.gameState.round_over_timestamp >= 2000) {
-      console.log(`Starting next round after delay`);
+    if (!lobby) {
+      console.error(`Game not found: ${id}`);
+      return res.status(404).json({ 
+        status: 'error', 
+        error: 'Game not found',
+        code: 'GAME_NOT_FOUND',
+        gameId: id 
+      });
+    }
+    
+    if (!lobby.gameState) {
+      console.error(`Game state not found for: ${id}`);
+      return res.status(404).json({ 
+        status: 'error', 
+        error: 'Game state not found',
+        code: 'GAME_STATE_NOT_FOUND',
+        gameId: id 
+      });
+    }
+    
+    // Check if we need to transition from round_over to jogando for multi-round hands
+    if (lobby.gameState.estado === 'round_over' && 
+        lobby.gameState.current_round && 
+        lobby.gameState.cartas && 
+        lobby.gameState.current_round < lobby.gameState.cartas) {
       
-      // Start the next round
-      lobby.gameState.estado = 'jogando';
-      lobby.gameState.current_round++;
-      lobby.gameState.mesa = [];
-      lobby.gameState.cards_played_this_round = 0;
+      // If it's been at least 4 seconds since the round ended
+      const currentTime = Date.now();
+      const roundOverTime = lobby.gameState.round_over_timestamp || 0;
       
-      // For subsequent rounds within the same hand, the winner of the previous round goes first
-      // If there was no winner (tie), the last player who played starts
-      if (lobby.gameState.tie_in_previous_round) {
-        // If there was a tie in the previous round, the player who played last starts
-        // (This is already set as last_round_winner in the play-card endpoint)
-        if (lobby.gameState.last_round_winner) {
-          console.log(`Previous round was a tie. Last player ${lobby.gameState.last_round_winner} will start next round`);
-          const firstPlayerIdx = lobby.gameState.players.indexOf(lobby.gameState.last_round_winner);
-          if (firstPlayerIdx !== -1) {
-            lobby.gameState.first_player = lobby.gameState.last_round_winner;
-            lobby.gameState.ordem_jogada = [
-              ...lobby.gameState.players.slice(firstPlayerIdx),
-              ...lobby.gameState.players.slice(0, firstPlayerIdx)
-            ].filter(p => !lobby.gameState.eliminados.includes(p));
-            lobby.gameState.current_player_idx = 0;
-          }
-        }
-      } else if (lobby.gameState.last_round_winner) {
-        // Winner of previous round starts
-        const firstPlayerIdx = lobby.gameState.players.indexOf(lobby.gameState.last_round_winner);
-        if (firstPlayerIdx !== -1) {
-          console.log(`Round winner ${lobby.gameState.last_round_winner} will start next round`);
-          lobby.gameState.first_player = lobby.gameState.last_round_winner;
+      if (currentTime - roundOverTime >= 4000) {
+        console.log(`Transitioning game ${id} from round_over to jogando for round ${lobby.gameState.current_round + 1}`);
+        
+        // Increment the current round
+        lobby.gameState.current_round += 1;
+        
+        // Update the game state
+        lobby.gameState.estado = 'jogando';
+        
+        // Clear the mesa for the next round
+        lobby.gameState.mesa = [];
+        lobby.gameState.cards_played_this_round = 0;
+        
+        // For multi-round hands within the same hand, the dealer rotation doesn't change
+        // First player should be the one after the dealer (consistent with the rules)
+        if (lobby.gameState.dealer !== undefined) {
+          const dealerIdx = lobby.gameState.players.indexOf(lobby.gameState.dealer);
+          lobby.gameState.first_player = lobby.gameState.players[(dealerIdx + 1) % lobby.gameState.players.length];
+          
+          // Set the play order starting from the first player
+          const firstPlayerIdx = lobby.gameState.players.indexOf(lobby.gameState.first_player);
           lobby.gameState.ordem_jogada = [
             ...lobby.gameState.players.slice(firstPlayerIdx),
             ...lobby.gameState.players.slice(0, firstPlayerIdx)
           ].filter(p => !lobby.gameState.eliminados.includes(p));
-          lobby.gameState.current_player_idx = 0;
-        } else {
-          // Fallback if winner is not found (shouldn't happen)
-          console.log(`Warning: Round winner ${lobby.gameState.last_round_winner} not found in players list`);
-          // Use dealer-based ordering as fallback
-          const dealerIdx = lobby.gameState.players.indexOf(lobby.gameState.dealer);
-          lobby.gameState.first_player = lobby.gameState.players[(dealerIdx + 1) % lobby.gameState.players.length];
-          lobby.gameState.ordem_jogada = [
-            ...lobby.gameState.players.slice(lobby.gameState.players.indexOf(lobby.gameState.first_player)),
-            ...lobby.gameState.players.slice(0, lobby.gameState.players.indexOf(lobby.gameState.first_player))
-          ].filter(p => !lobby.gameState.eliminados.includes(p));
+          
           lobby.gameState.current_player_idx = 0;
         }
-      } else if (lobby.gameState.mesa && lobby.gameState.mesa.length > 0) {
-        // No winner (tie) - last player who played starts
-        const lastPlayerId = lobby.gameState.mesa[lobby.gameState.mesa.length - 1][0];
-        const lastPlayerIdx = lobby.gameState.players.indexOf(lastPlayerId);
-        console.log(`No round winner (tie). Last player ${lastPlayerId} will start next round`);
-        lobby.gameState.first_player = lastPlayerId;
-        lobby.gameState.ordem_jogada = [
-          ...lobby.gameState.players.slice(lastPlayerIdx),
-          ...lobby.gameState.players.slice(0, lastPlayerIdx)
-        ].filter(p => !lobby.gameState.eliminados.includes(p));
-        lobby.gameState.current_player_idx = 0;
-      } else {
-        // Fallback - first player is to the right of the dealer (clockwise)
-        console.log(`Using dealer-based ordering as fallback`);
-        const dealerIdx = lobby.gameState.players.indexOf(lobby.gameState.dealer);
-        lobby.gameState.first_player = lobby.gameState.players[(dealerIdx + 1) % lobby.gameState.players.length];
-        lobby.gameState.ordem_jogada = [
-          ...lobby.gameState.players.slice(lobby.gameState.players.indexOf(lobby.gameState.first_player)),
-          ...lobby.gameState.players.slice(0, lobby.gameState.players.indexOf(lobby.gameState.first_player))
-        ].filter(p => !lobby.gameState.eliminados.includes(p));
-        lobby.gameState.current_player_idx = 0;
+        
+        // Reset the round_over_timestamp
+        lobby.gameState.round_over_timestamp = undefined;
+        
+        // Save the updated lobby
+        await setLobby(lobby);
       }
-      
-      lobby.gameState.round_over_timestamp = undefined;
-      
-      // Save the updated game state
-      await setLobby(lobby);
     }
+    
+    return res.status(200).json({ status: 'success', game_state: lobby.gameState });
+  } catch (error) {
+    console.error(`Error processing game state for ID ${id}:`, error);
+    return res.status(500).json({ 
+      status: 'error', 
+      error: 'Server error processing game state',
+      code: 'SERVER_ERROR',
+      gameId: id
+    });
   }
-  
-  return res.status(200).json({ status: 'success', game_state: lobby.gameState });
 } 

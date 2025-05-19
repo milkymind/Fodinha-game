@@ -11,6 +11,7 @@ type Lobby = {
   lives: number;
   gameStarted?: boolean;
   gameState?: any;
+  lastUpdated?: number;
 };
 
 type Data = {
@@ -63,46 +64,132 @@ async function init() {
   await db.write();
 }
 
+// Use a long polling approach to improve persistence in serverless
+const MAX_POLLING_ATTEMPTS = 3;
+
 export async function getLobby(gameId: string): Promise<Lobby | undefined> {
-  // For production/Vercel, first check the memory cache
-  if (isProduction && memoryLobbies[gameId]) {
+  // For production/Vercel, with improved reliability
+  if (isProduction) {
+    // First check memory cache
+    if (memoryLobbies[gameId]) {
+      return memoryLobbies[gameId];
+    }
+    
+    // If not in memory, try retrieving from db with retries
+    for (let attempt = 1; attempt <= MAX_POLLING_ATTEMPTS; attempt++) {
+      try {
+        await init();
+        const lobby = db.data.lobbies[gameId];
+        
+        if (lobby) {
+          // Cache result in memory for faster access
+          memoryLobbies[gameId] = lobby;
+          break;
+        }
+        
+        if (attempt < MAX_POLLING_ATTEMPTS) {
+          // Short delay between attempts
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      } catch (err) {
+        console.error(`Error retrieving lobby (attempt ${attempt}/${MAX_POLLING_ATTEMPTS}):`, err);
+      }
+    }
+    
     return memoryLobbies[gameId];
   }
   
+  // Development environment - use file storage directly
   await init();
-  const lobby = db.data.lobbies[gameId];
-  
-  // Cache the result in memory for faster access
-  if (isProduction && lobby) {
-    memoryLobbies[gameId] = lobby;
-  }
-  
-  return lobby;
+  return db.data.lobbies[gameId];
 }
 
 export async function setLobby(lobby: Lobby) {
-  // Save to memory cache first for Vercel
-  if (isProduction) {
-    memoryLobbies[lobby.gameId] = lobby;
-  }
+  // Add timestamp to track updates
+  lobby.lastUpdated = Date.now();
   
-  await init();
-  db.data.lobbies[lobby.gameId] = lobby;
-  await db.write();
+  // Save to memory first for all environments
+  memoryLobbies[lobby.gameId] = lobby;
+  
+  if (isProduction) {
+    // For production, save with retries
+    for (let attempt = 1; attempt <= MAX_POLLING_ATTEMPTS; attempt++) {
+      try {
+        await init();
+        db.data.lobbies[lobby.gameId] = lobby;
+        await db.write();
+        break;
+      } catch (err) {
+        console.error(`Error saving lobby (attempt ${attempt}/${MAX_POLLING_ATTEMPTS}):`, err);
+        
+        if (attempt < MAX_POLLING_ATTEMPTS) {
+          // Short delay between attempts
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+    }
+  } else {
+    // Regular development mode using file system
+    await init();
+    db.data.lobbies[lobby.gameId] = lobby;
+    await db.write();
+  }
 }
 
 export async function getAllLobbies(): Promise<Record<string, Lobby>> {
+  // In production, combine memory cache with stored data
+  if (isProduction) {
+    try {
+      await init();
+      // Merge db lobbies with in-memory lobbies, preferring newer versions
+      const allLobbies = { ...db.data.lobbies };
+      
+      // Add any lobbies from memory that might be newer
+      for (const [id, lobby] of Object.entries(memoryLobbies)) {
+        const dbLobby = allLobbies[id];
+        if (!dbLobby || !dbLobby.lastUpdated || (lobby.lastUpdated && lobby.lastUpdated > dbLobby.lastUpdated)) {
+          allLobbies[id] = lobby;
+        }
+      }
+      
+      return allLobbies;
+    } catch (err) {
+      console.error('Error getting all lobbies, returning memory cache:', err);
+      // If there's an error, fall back to memory cache
+      return memoryLobbies;
+    }
+  }
+  
+  // Development environment - use file storage
   await init();
   return db.data.lobbies;
 }
 
 export async function deleteLobby(gameId: string) {
-  // Remove from memory cache for Vercel
-  if (isProduction) {
-    delete memoryLobbies[gameId];
-  }
+  // Remove from memory cache
+  delete memoryLobbies[gameId];
   
-  await init();
-  delete db.data.lobbies[gameId];
-  await db.write();
+  if (isProduction) {
+    // For production, delete with retries
+    for (let attempt = 1; attempt <= MAX_POLLING_ATTEMPTS; attempt++) {
+      try {
+        await init();
+        delete db.data.lobbies[gameId];
+        await db.write();
+        break;
+      } catch (err) {
+        console.error(`Error deleting lobby (attempt ${attempt}/${MAX_POLLING_ATTEMPTS}):`, err);
+        
+        if (attempt < MAX_POLLING_ATTEMPTS) {
+          // Short delay between attempts
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+    }
+  } else {
+    // Regular development mode using file system
+    await init();
+    delete db.data.lobbies[gameId];
+    await db.write();
+  }
 }

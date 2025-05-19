@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import styles from '../styles/Game.module.css';
 
 interface GameProps {
@@ -39,7 +39,7 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [bet, setBet] = useState<string>('');
   const [gameStatus, setGameStatus] = useState<string>('');
-  const [error, setError] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
   const [waitingMsg, setWaitingMsg] = useState<string>('');
   const [lastPlayedCard, setLastPlayedCard] = useState<{playerId: number, card: string} | null>(null);
   const [winnerMessage, setWinnerMessage] = useState<string | null>(null);
@@ -47,26 +47,46 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
   const [roundEndMessage, setRoundEndMessage] = useState<string | null>(null);
   const [prevRound, setPrevRound] = useState<number | null>(null);
   const [prevHand, setPrevHand] = useState<number | null>(null);
+  const [retryCount, setRetryCount] = useState<number>(0);
+  const [pollError, setPollError] = useState<boolean>(false);
+  const unmounted = useRef<boolean>(false);
 
   // Fetch game state periodically
   useEffect(() => {
     const fetchGameState = async () => {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
         
         const response = await fetch(`/api/game-state/${gameId}`, {
-          signal: controller.signal
+          signal: controller.signal,
+          // Add cache busting to prevent stale data issues
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+          }
         });
         
         clearTimeout(timeoutId);
         
         if (!response.ok) {
+          if (response.status === 404) {
+            throw new Error(`Game not found (404): ${gameId}`);
+          }
           throw new Error(`Server responded with status: ${response.status}`);
         }
         
         const data = await response.json();
         if (data.status === 'success') {
+          // Reset error state on successful fetch
+          if (error) {
+            setError(null);
+          }
+          
+          // Reset retry count on successful connection
+          setRetryCount(0);
+          
           const newGameState = data.game_state;
           
           // Check for round changes
@@ -118,6 +138,8 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
           // Save current round and hand to detect changes
           setPrevRound(newGameState.current_round || null);
           setPrevHand(newGameState.current_hand || null);
+        } else {
+          throw new Error(data.error || 'Unknown error');
         }
       } catch (error: any) {
         console.error('Error fetching game state:', error);
@@ -127,23 +149,58 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
           setError('Request timed out. The server might be slow or offline.');
         } else if (!navigator.onLine) {
           setError('You are offline. Please check your internet connection.');
+        } else if (error.message.includes('404')) {
+          setError('Game not found. The lobby might have been deleted.');
+          setPollError(true); // Stop polling on 404
+          return;
         } else {
           setError('Failed to update game state. The game will try to reconnect.');
         }
         
-        // Don't disable polling - we want to retry
+        // Implement exponential backoff for retries
+        if (retryCount < 5) {
+          const nextRetryCount = retryCount + 1;
+          setRetryCount(nextRetryCount);
+          
+          // Calculate backoff time: 1s, 2s, 4s, 8s, 16s
+          const backoffTime = Math.min(1000 * Math.pow(2, nextRetryCount - 1), 16000);
+          console.log(`Retrying connection in ${backoffTime/1000} seconds (attempt ${nextRetryCount}/5)`);
+          
+          // Temporarily stop polling until after backoff
+          setPollError(true);
+          
+          // Set up timer for retry
+          const retryTimer = setTimeout(() => {
+            if (!unmounted.current) {
+              setPollError(false); // Resume polling after backoff
+            }
+          }, backoffTime);
+          
+          // Clean up timer if component unmounts
+          return () => clearTimeout(retryTimer);
+        } else {
+          // After 5 failed attempts, stop retrying
+          setError('Unable to connect to the game. Please refresh the page or try again later.');
+          setPollError(true);
+        }
       }
     };
-
-    // Initial fetch
+    
+    // Fetch game state immediately
     fetchGameState();
-
-    // Set up polling every 2 seconds
-    const interval = setInterval(fetchGameState, 2000);
-
+    
+    // Only set up polling if we're not in an error state
+    let interval: NodeJS.Timeout | null = null;
+    if (!pollError) {
+      interval = setInterval(fetchGameState, 2000);
+    }
+    
     // Clean up interval on unmount
-    return () => clearInterval(interval);
-  }, [gameId, prevRoundWinner, prevRound, prevHand]);
+    return () => {
+      if (interval) clearInterval(interval);
+      unmounted.current = true;
+    };
+  }, [gameId, prevRoundWinner, prevRound, prevHand, retryCount, error, pollError]);
 
   // Update game status message based on state
   const updateGameStatus = (state: GameState) => {

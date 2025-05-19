@@ -1,11 +1,71 @@
 # ♠️ Fodinha Card Game
 
-A modern web implementation of the traditional Brazilian card game **Fodinha** (also known as *Oh Hell!* or *Truco Paulista*), built with Next.js and React.
+A multiplayer online implementation of the Brazilian card game "Fodinha".
+
+## Deployment Instructions for Vercel
+
+### 1. Deploy to Vercel
+This game is designed to work smoothly on Vercel's serverless environment, even with its stateless nature:
+
+1. Fork or clone this repository to your GitHub account
+2. Sign up at [Vercel](https://vercel.com) if you haven't already
+3. Import your GitHub repository
+4. Deploy with default settings
+
+### 2. Architecture
+- The game uses optimistic concurrency with multiple fallbacks to maintain game state:
+  - In-memory cache for fastest responses
+  - Improved polling with retry logic for reliability
+  - Error handling with exponential backoff
+
+## Local Development
+
+For local development, the game uses a file-based database (db.json):
+
+```bash
+# Install dependencies
+npm install
+
+# Run the development server
+npm run dev
+```
+
+## Game Rules
+
+Fodinha is played with a standard deck of 40 cards (A, 2, 3, 4, 5, 6, 7, J, Q, K). The game starts with a single card hand, which increases by one card each hand until players are eliminated.
+
+### Basic Gameplay:
+
+1. Players start with 3 lives
+2. The dealer is randomly selected at the start
+3. Players make bets on how many rounds they'll win in each hand
+4. The sum of all bets cannot equal the number of cards dealt
+5. Players lose a life if they don't win the exact number of rounds they bet
+6. The last player with lives remaining wins
+
+### Card Values (Highest to Lowest):
+3, 2, A, K, J, Q, 7, 6, 5, 4
+
+### Suits Tiebreaker (Highest to Lowest):
+♣ (Clubs), ♥ (Hearts), ♠ (Spades), ♦ (Diamonds)
+
+## Troubleshooting
+
+If you experience any issues with games disappearing or persistence:
+
+1. Make sure only one instance of the game is running per lobby
+2. Try refreshing the page if the UI seems stuck
+3. Look for error messages in the browser console
+
+---
+
+#### 👁️ Special First-Round Rule
+- In round 1, **you cannot see your own card**
+- However, you **can see all other players' cards**
 
 ---
 
 ## 🎮 How to Play Fodinha
-
 Fodinha is a **round-based trick-taking card game** with betting mechanics and elimination by lives. It's strategic, social, and gets more intense as the rounds progress.
 
 ### 🧠 Objective
@@ -41,7 +101,7 @@ Predict the number of **tricks** (round wins) you'll win each round. Get it wron
 
 #### 👁️ Special First-Round Rule
 - In round 1, **you cannot see your own card**
-- However, you **can see all other players’ cards**
+- However, you **can see all other players' cards**
 
 ---
 

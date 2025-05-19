@@ -282,6 +282,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
   
+  // Save the round-ending timestamp for the delay before next round
+  if (gameState.current_round !== undefined && gameState.cartas !== undefined && 
+      gameState.current_round < gameState.cartas) {
+    gameState.round_over_timestamp = Date.now();
+    console.log(`End of round ${gameState.current_round}. Setting timestamp for delay before next round.`);
+  }
+  
   lobby.gameState = gameState;
   await setLobby(lobby);
   
