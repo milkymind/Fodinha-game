@@ -32,6 +32,7 @@ interface GameState {
   last_round_winner?: number;
   last_trick_winner?: number;
   round_over_timestamp?: number;
+  tie_in_previous_round?: boolean;
 }
 
 export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
@@ -51,7 +52,19 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
   useEffect(() => {
     const fetchGameState = async () => {
       try {
-        const response = await fetch(`/api/game-state/${gameId}`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+        
+        const response = await fetch(`/api/game-state/${gameId}`, {
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          throw new Error(`Server responded with status: ${response.status}`);
+        }
+        
         const data = await response.json();
         if (data.status === 'success') {
           const newGameState = data.game_state;
@@ -80,11 +93,16 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
             }, 3000);
           }
           
-          // Check if there's a new round winner to announce
+          // Check if there's a new round winner or tie to announce
           const roundWinner = newGameState.last_round_winner || newGameState.last_trick_winner;
           if (roundWinner && roundWinner !== prevRoundWinner) {
-            const winnerName = newGameState.player_names[roundWinner];
-            setWinnerMessage(`${winnerName} won the round!`);
+            // Check if this was a tie in a non-final round
+            if (newGameState.tie_in_previous_round) {
+              setWinnerMessage(`Round ended in a tie! Next round will have a x${newGameState.multiplicador || 2} multiplier.`);
+            } else {
+              const winnerName = newGameState.player_names[roundWinner];
+              setWinnerMessage(`${winnerName} won the round!`);
+            }
             setPrevRoundWinner(roundWinner);
             
             // Clear the message after 3 seconds
@@ -101,8 +119,19 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
           setPrevRound(newGameState.current_round || null);
           setPrevHand(newGameState.current_hand || null);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error fetching game state:', error);
+        
+        // Handle specific error types
+        if (error.name === 'AbortError') {
+          setError('Request timed out. The server might be slow or offline.');
+        } else if (!navigator.onLine) {
+          setError('You are offline. Please check your internet connection.');
+        } else {
+          setError('Failed to update game state. The game will try to reconnect.');
+        }
+        
+        // Don't disable polling - we want to retry
       }
     };
 
@@ -151,7 +180,11 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
       if (state.current_round && state.cartas && state.current_round < state.cartas) {
         // Between rounds in a multi-card hand
         const roundWinner = state.last_round_winner || state.last_trick_winner;
-        if (roundWinner) {
+        
+        if (state.tie_in_previous_round) {
+          setGameStatus(`Round ${state.current_round} complete! It was a tie.`);
+          setWaitingMsg(`Starting next round shortly... Next round will have a x${state.multiplicador || 2} multiplier.`);
+        } else if (roundWinner) {
           const winnerName = state.player_names[roundWinner];
           setGameStatus(`Round ${state.current_round} complete! ${winnerName} won this round.`);
           
@@ -405,7 +438,8 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
               </div>
               <div className={styles.playerStats}>
                 <div className={styles.playerLives}>
-                  {'❤️'.repeat(gameState.vidas[id])}
+                  {'❤️'.repeat(Math.max(0, gameState.vidas[id]))}
+                  {gameState.vidas[id] <= 0 && <span className={styles.eliminatedText}>Eliminated</span>}
                 </div>
                 {gameState.palpites && gameState.palpites[id] !== undefined && (
                   <div className={styles.playerBet}>
@@ -499,7 +533,7 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
         )}
       </div>
 
-      {gameState?.estado === 'aguardando' && (
+      {gameState?.estado === 'aguardando' && playerId === 1 && (
         <div className={styles.actionContainer}>
           <button 
             onClick={startRound} 
@@ -507,6 +541,12 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
           >
             Start New Hand
           </button>
+        </div>
+      )}
+
+      {gameState?.estado === 'aguardando' && playerId !== 1 && (
+        <div className={styles.actionContainer}>
+          <p className={styles.waitingMsg}>Waiting for host to start next hand...</p>
         </div>
       )}
 

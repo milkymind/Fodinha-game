@@ -498,4 +498,21 @@
 
 .clubSuit, .spadeSuit {
   color: #212529;
+}
+
+.playerLives {
+  font-size: 1.2rem;
+  margin-bottom: 0.5rem;
+}
+
+.eliminatedText {
+  color: #dc3545;
+  font-weight: bold;
+  font-style: italic;
+  margin-left: 5px;
+}
+
+.playerBet, .playerWins {
+  margin-bottom: 0.3rem;
+  font-size: 0.9rem;
 } 

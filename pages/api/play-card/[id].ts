@@ -82,13 +82,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.log(`Checking if we should transition from round_over to jogando`);
     console.log(`Current round: ${gameState.current_round}, Cards per hand: ${gameState.cartas}`);
     
-    // If it's been at least 2 seconds since the round ended, start a new round
+    // If it's been at least 4 seconds since the round ended, start a new round
     const now = Date.now();
-    if (gameState.round_over_timestamp && now - gameState.round_over_timestamp >= 2000) {
+    if (gameState.round_over_timestamp && now - gameState.round_over_timestamp >= 4000) {
       console.log(`Starting next round after delay`);
       // Start the next round
       gameState.estado = 'jogando';
       gameState.current_round++;
+      
+      // Only clear the mesa (table) after the delay
       gameState.mesa = [];
       gameState.cards_played_this_round = 0;
       
@@ -243,8 +245,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         gameState.last_round_winner = winner;
         gameState.last_trick_winner = winner; // For backward compatibility
         
-        // Clear the mesa for the next round
-        gameState.mesa = [];
+        // Don't clear the mesa here, keep the cards visible during the delay
+        // This allows players to see the final cards played in the round
       } else {
         // This was the last round of the hand, hand is complete
         gameState.estado = 'round_over';
