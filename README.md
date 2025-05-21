@@ -94,7 +94,6 @@ npm run start
 ---
 
 ## ✨ Game Features
-- Animated card dealing, flipping, and discarding
 - Gold shine highlight for winning cards
 - Visual card selection feedback
 - Color-coded status notifications
