@@ -27,7 +27,7 @@ export default function App({ Component, pageProps }: AppProps) {
           reconnectionDelay: 1000,
           reconnectionDelayMax: 5000,
           timeout: 20000,
-          transports: ['websocket', 'polling'], // Try WebSocket first, fall back to polling
+          transports: ['polling', 'websocket'], // Start with polling, then upgrade to WebSocket
           upgrade: true, // Allow transport upgrade
           forceNew: true, // Force a new connection
           autoConnect: true,

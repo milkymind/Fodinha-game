@@ -42,8 +42,8 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
     },
     // Server-side connection timeout
     connectTimeout: 10000,
-    // Transports - prefer websocket, fall back to polling
-    transports: ['websocket', 'polling'],
+    // Transports - start with polling, then upgrade to websocket
+    transports: ['polling', 'websocket'],
     // Allow upgrading from polling to websocket
     allowUpgrades: true,
     // Additional performance settings

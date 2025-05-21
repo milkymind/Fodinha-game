@@ -265,15 +265,18 @@ export default function Home() {
                 
                 <div className={styles.inputGroup}>
                   <label htmlFor="lives">Starting Lives:</label>
-                  <input
+                  <select
                     id="lives"
-                    type="number"
                     value={lives}
-                    onChange={(e) => setLives(Math.max(1, Math.min(5, parseInt(e.target.value) || 3)))}
-                    min="1"
-                    max="5"
+                    onChange={(e) => setLives(parseInt(e.target.value))}
                     className={styles.input}
-                  />
+                  >
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                  </select>
                 </div>
                 
                 <button 
