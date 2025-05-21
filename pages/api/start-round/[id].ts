@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getLobby, setLobby } from '../persistent-store';
+import { Server as SocketServer } from 'socket.io';
 
 const SUITS = ['♣', '♥', '♠', '♦'];
 const VALUES = ['4', '5', '6', '7', 'Q', 'J', 'K', 'A', '2', '3'];
@@ -80,13 +81,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     gameState.dealer = gameState.players[Math.floor(Math.random() * gameState.players.length)];
   } else {
     // Rotate dealer
-    const dealerIdx = gameState.players.indexOf(gameState.dealer);
-    gameState.dealer = gameState.players[(dealerIdx + 1) % gameState.players.length];
+    const currentDealerIdx = gameState.players.indexOf(gameState.dealer);
+    gameState.dealer = gameState.players[(currentDealerIdx + 1) % gameState.players.length];
   }
   
   // First player is after the dealer
-  const dealerIdx = gameState.players.indexOf(gameState.dealer);
-  gameState.first_player = gameState.players[(dealerIdx + 1) % gameState.players.length];
+  const nextDealerIdx = gameState.players.indexOf(gameState.dealer);
+  gameState.first_player = gameState.players[(nextDealerIdx + 1) % gameState.players.length];
   
   // Reset game state for new round/hand
   gameState.multiplicador = 1;
@@ -160,12 +161,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
   
+  // For one-card hands, store original hands to reference when playing
+  if (gameState.cartas === 1) {
+    gameState.original_maos = JSON.parse(JSON.stringify(gameState.maos));
+    console.log("This is a one-card hand, preserving original cards");
+  }
+  
+  // Get active players (not eliminated)
+  const activePlayers = gameState.players.filter((id: number) => !gameState.eliminados.includes(id));
+  
   // Set up betting phase
   gameState.estado = 'apostas';
-  gameState.ordem_jogada = [
-    ...gameState.players.slice(gameState.players.indexOf(gameState.first_player)),
-    ...gameState.players.slice(0, gameState.players.indexOf(gameState.first_player))
-  ];
+  
+  // First player is after the dealer (reuse first_player set earlier)
+  console.log(`Dealer: Player ${gameState.dealer}, First player to bet/play: Player ${gameState.first_player}`);
+  
+  // Find the index of the first player
+  const firstPlayerIndex = gameState.players.indexOf(gameState.first_player);
+  
+  // Construct the play order starting from first player
+  const playOrder = [];
+  for (let i = 0; i < gameState.players.length; i++) {
+    const idx = (firstPlayerIndex + i) % gameState.players.length;
+    const player = gameState.players[idx];
+    // Only include active players in the play order
+    if (!gameState.eliminados.includes(player)) {
+      playOrder.push(player);
+    }
+  }
+  
+  console.log(`Play order: ${playOrder.join(', ')}`);
+  
+  gameState.ordem_jogada = playOrder;
   gameState.current_player_idx = 0;
   gameState.soma_palpites = 0;
   
@@ -182,6 +209,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Update the lobby with the new game state
   lobby.gameState = gameState;
   await setLobby(lobby);
+  
+  // Emit the updated game state via WebSockets if available
+  try {
+    // @ts-ignore - NextJS doesn't have type definitions for socket.server.io
+    const io = res.socket?.server?.io;
+    if (io) {
+      io.to(id as string).emit('game-state-update', { gameState });
+    }
+  } catch (error) {
+    console.error('Error emitting socket event:', error);
+    // Continue with the API response even if socket emission fails
+  }
   
   return res.status(200).json({
     status: 'success',

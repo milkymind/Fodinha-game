@@ -1,71 +1,11 @@
 # ♠️ Fodinha Card Game
 
-A multiplayer online implementation of the Brazilian card game "Fodinha".
-
-## Deployment Instructions for Vercel
-
-### 1. Deploy to Vercel
-This game is designed to work smoothly on Vercel's serverless environment, even with its stateless nature:
-
-1. Fork or clone this repository to your GitHub account
-2. Sign up at [Vercel](https://vercel.com) if you haven't already
-3. Import your GitHub repository
-4. Deploy with default settings
-
-### 2. Architecture
-- The game uses optimistic concurrency with multiple fallbacks to maintain game state:
-  - In-memory cache for fastest responses
-  - Improved polling with retry logic for reliability
-  - Error handling with exponential backoff
-
-## Local Development
-
-For local development, the game uses a file-based database (db.json):
-
-```bash
-# Install dependencies
-npm install
-
-# Run the development server
-npm run dev
-```
-
-## Game Rules
-
-Fodinha is played with a standard deck of 40 cards (A, 2, 3, 4, 5, 6, 7, J, Q, K). The game starts with a single card hand, which increases by one card each hand until players are eliminated.
-
-### Basic Gameplay:
-
-1. Players start with 3 lives
-2. The dealer is randomly selected at the start
-3. Players make bets on how many rounds they'll win in each hand
-4. The sum of all bets cannot equal the number of cards dealt
-5. Players lose a life if they don't win the exact number of rounds they bet
-6. The last player with lives remaining wins
-
-### Card Values (Highest to Lowest):
-3, 2, A, K, J, Q, 7, 6, 5, 4
-
-### Suits Tiebreaker (Highest to Lowest):
-♣ (Clubs), ♥ (Hearts), ♠ (Spades), ♦ (Diamonds)
-
-## Troubleshooting
-
-If you experience any issues with games disappearing or persistence:
-
-1. Make sure only one instance of the game is running per lobby
-2. Try refreshing the page if the UI seems stuck
-3. Look for error messages in the browser console
-
----
-
-#### 👁️ Special First-Round Rule
-- In round 1, **you cannot see your own card**
-- However, you **can see all other players' cards**
+A modern web implementation of the traditional Brazilian card game **Fodinha** (also known as *Oh Hell!* or *Truco Paulista*), built with Next.js and React.
 
 ---
 
 ## 🎮 How to Play Fodinha
+
 Fodinha is a **round-based trick-taking card game** with betting mechanics and elimination by lives. It's strategic, social, and gets more intense as the rounds progress.
 
 ### 🧠 Objective
@@ -115,7 +55,16 @@ Predict the number of **tricks** (round wins) you'll win each round. Get it wron
 4. Import this project repository
 5. Click **Deploy**
 
-📦 Note: The game uses in-memory storage. This means game data resets if the Vercel instance restarts.
+⚠️ **Important Production Notes**: 
+- The default implementation uses in-memory storage for production which has limitations:
+  - Game data resets if the Vercel instance restarts
+  - Memory is not shared between serverless functions
+  - Instances may freeze after 10-15 minutes of inactivity
+- For a more robust production setup, consider using:
+  - Vercel KV (Redis-based storage)
+  - MongoDB Atlas
+  - Supabase
+  - Or any other persistent database service
 
 ### 🖥️ Option 2: Run Locally
 
@@ -145,8 +94,10 @@ npm run start
 ---
 
 ## ✨ Game Features
-- PokerStars-style visual interface
 - Animated card dealing, flipping, and discarding
+- Gold shine highlight for winning cards
+- Visual card selection feedback
+- Color-coded status notifications
 - Player HUDs with:
   - Player names
   - Current bets
@@ -157,7 +108,36 @@ npm run start
 - Trick winner resolution
 - Card tie logic & double trick rule
 - Hidden self-card in round 1
-- Room-based matchmaking system (coming soon)
+- Room-based matchmaking system
+- Optimized for mobile and desktop
+
+---
+
+## 🛠️ Technical Improvements
+
+### Performance Optimizations
+- Dynamic debounce timing based on hand size
+- Preemptive visual feedback for responsive gameplay
+- Robust error handling with automatic retries
+- Smart socket reconnection logic
+- Optimized state updates to prevent flickering
+- Rate limiting with backoff strategy
+- Efficient API polling
+
+### Database Management
+- Automatic database file integrity checking
+- Built-in lobby purging functionality
+- Timestamp tracking for all game lobbies
+- Database permissions handling
+
+#### Lobby Purging
+The system includes automatic purging of old, inactive lobbies:
+- Run automatically when starting the server with `npm run start`
+- Configurable age threshold (default: 7 days)
+- Manual purging available via `npm run purge-lobbies`
+- Dry-run option to preview what would be purged: `npm run purge-lobbies:dry`
+
+See [LOBBY-PURGE.md](LOBBY-PURGE.md) for more details.
 
 ---
 
@@ -165,9 +145,15 @@ npm run start
 - Next.js – Framework for React and fullstack logic
 - React – UI library
 - TypeScript – Type safety
-- Tailwind CSS – Styling and layout
-- Framer Motion – Smooth animations
+- Socket.IO – Real-time communication
 - lowdb – Lightweight file-based JSON database for storage
+
+---
+
+## 🧪 Known Limitations
+- In-memory storage in production may cause games to reset if instances restart
+- Best experience with 2-6 players
+- Slight lag may occur in hands with 4-5 cards
 
 ---
 

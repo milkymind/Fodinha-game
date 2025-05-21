@@ -8,9 +8,18 @@ const nextConfig = {
     domains: [],
   },
   // Configure API routes
-  api: {
-    bodyParser: true,
-    responseLimit: '8mb',
+  async headers() {
+    return [
+      {
+        source: '/api/(.*)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-store, max-age=0',
+          },
+        ],
+      },
+    ];
   }
 }
 

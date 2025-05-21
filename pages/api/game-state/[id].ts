@@ -1,30 +1,95 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getLobby, setLobby } from '../persistent-store';
+import { Server as SocketServer } from 'socket.io';
+
+// Track last processed requests
+const lastProcessedRequests = new Map<string, { timestamp: number, etag: string }>();
+
+// Clear old entries periodically
+setInterval(() => {
+  const now = Date.now();
+  lastProcessedRequests.forEach((data, key) => {
+    if (now - data.timestamp > 10 * 60 * 1000) { // 10 minutes
+      lastProcessedRequests.delete(key);
+    }
+  });
+}, 5 * 60 * 1000); // Clean every 5 minutes
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { id } = req.query;
+  const playerId = req.headers['x-player-id'] ? parseInt(req.headers['x-player-id'] as string) : undefined;
   
   try {
+    // Check if this is a cached request
+    const requestKey = `${id}-${playerId || 'anonymous'}`;
+    const ifNoneMatch = req.headers['if-none-match'];
+    const lastProcessed = lastProcessedRequests.get(requestKey);
+    
+    // If the client sent an etag and it matches our last processed request,
+    // and it's recent (within 5 seconds), return 304 Not Modified
+    if (ifNoneMatch && 
+        lastProcessed && 
+        ifNoneMatch === lastProcessed.etag && 
+        Date.now() - lastProcessed.timestamp < 5000) {
+      res.status(304).end();
+      return;
+    }
+    
+    // Fetch the lobby data
+    console.log(`Processing game-state request for game ${id}, player ${playerId || 'anonymous'}`);
     const lobby = await getLobby(id as string);
     
     if (!lobby) {
-      console.error(`Game not found: ${id}`);
-      return res.status(404).json({ 
-        status: 'error', 
-        error: 'Game not found',
-        code: 'GAME_NOT_FOUND',
-        gameId: id 
-      });
+      console.log(`Game ${id} not found`);
+      return res.status(404).json({ status: 'error', error: 'Game not found' });
     }
     
     if (!lobby.gameState) {
-      console.error(`Game state not found for: ${id}`);
-      return res.status(404).json({ 
-        status: 'error', 
-        error: 'Game state not found',
-        code: 'GAME_STATE_NOT_FOUND',
-        gameId: id 
-      });
+      console.log(`Game state for ${id} not found`);
+      return res.status(404).json({ status: 'error', error: 'Game state not found' });
+    }
+    
+    // Track player activity if this is a player request
+    let shouldUpdateLobby = false;
+    
+    if (playerId) {
+      const now = Date.now();
+      
+      // Initialize or update the last_activity tracker
+      if (!lobby.gameState.last_activity) {
+        lobby.gameState.last_activity = {};
+        shouldUpdateLobby = true;
+      }
+      
+      // Only update timestamp if it's been more than 5 seconds since last update
+      const lastActivity = lobby.gameState.last_activity[playerId] || 0;
+      if (now - lastActivity > 5000) {
+        lobby.gameState.last_activity[playerId] = now;
+        shouldUpdateLobby = true;
+        
+        // Check for inactive players (inactive for > 2 minutes)
+        if (lobby.gameState.players && lobby.gameState.estado !== 'terminado') {
+          const inactiveThreshold = 2 * 60 * 1000; // 2 minutes
+          const activePlayers = new Set();
+          
+          Object.entries(lobby.gameState.last_activity).forEach(([pid, timestamp]) => {
+            if ((now - (timestamp as number)) < inactiveThreshold) {
+              activePlayers.add(parseInt(pid));
+            }
+          });
+          
+          // If we detect inactive players, mark them in the gameState
+          const inactivePlayers = lobby.gameState.players.filter(
+            (p: number) => !activePlayers.has(p) && p !== playerId
+          );
+          
+          // Only update if the inactive players list has changed
+          if (JSON.stringify(lobby.gameState.inactive_players || []) !== JSON.stringify(inactivePlayers)) {
+            lobby.gameState.inactive_players = inactivePlayers;
+            shouldUpdateLobby = true;
+          }
+        }
+      }
     }
     
     // Check if we need to transition from round_over to jogando for multi-round hands
@@ -33,55 +98,91 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         lobby.gameState.cartas && 
         lobby.gameState.current_round < lobby.gameState.cartas) {
       
-      // If it's been at least 4 seconds since the round ended
-      const currentTime = Date.now();
-      const roundOverTime = lobby.gameState.round_over_timestamp || 0;
-      
-      if (currentTime - roundOverTime >= 4000) {
-        console.log(`Transitioning game ${id} from round_over to jogando for round ${lobby.gameState.current_round + 1}`);
+      // If it's been at least 750ms since the round ended
+      if (lobby.gameState.round_over_timestamp && 
+          Date.now() - lobby.gameState.round_over_timestamp >= 750) {
         
-        // Increment the current round
-        lobby.gameState.current_round += 1;
+        console.log(`Starting next round after delay for game ${id}`);
+        shouldUpdateLobby = true;
         
-        // Update the game state
+        // Clear the winning card flag for the next round
+        lobby.gameState.winning_card_played_by = undefined;
+        
+        // Clear the table and move to the next round
+        lobby.gameState.mesa = [];
         lobby.gameState.estado = 'jogando';
         
-        // Clear the mesa for the next round
-        lobby.gameState.mesa = [];
+        // Increment the current round counter
+        lobby.gameState.current_round++;
+        console.log(`Game ${id}: Transitioning to round ${lobby.gameState.current_round} of ${lobby.gameState.cartas}`);
+        
+        // Reset the cards_played_this_round counter
         lobby.gameState.cards_played_this_round = 0;
         
-        // For multi-round hands within the same hand, the dealer rotation doesn't change
-        // First player should be the one after the dealer (consistent with the rules)
-        if (lobby.gameState.dealer !== undefined) {
-          const dealerIdx = lobby.gameState.players.indexOf(lobby.gameState.dealer);
-          lobby.gameState.first_player = lobby.gameState.players[(dealerIdx + 1) % lobby.gameState.players.length];
+        // Set the first player for the next round (winner of the previous round)
+        const lastWinner = lobby.gameState.last_round_winner || lobby.gameState.last_trick_winner;
+        if (lastWinner) {
+          console.log(`Game ${id}: Round winner ${lastWinner} will start next round`);
           
-          // Set the play order starting from the first player
-          const firstPlayerIdx = lobby.gameState.players.indexOf(lobby.gameState.first_player);
-          lobby.gameState.ordem_jogada = [
-            ...lobby.gameState.players.slice(firstPlayerIdx),
-            ...lobby.gameState.players.slice(0, firstPlayerIdx)
-          ].filter(p => !lobby.gameState.eliminados.includes(p));
-          
-          lobby.gameState.current_player_idx = 0;
+          // Find the index of the winner in the players array
+          const winnerIdx = lobby.gameState.players.indexOf(lastWinner);
+          if (winnerIdx !== -1) {
+            lobby.gameState.current_player_idx = 0;
+            
+            // Reorder the players so the winner goes first
+            const newOrder = [];
+            for (let i = 0; i < lobby.gameState.players.length; i++) {
+              const idx = (winnerIdx + i) % lobby.gameState.players.length;
+              newOrder.push(lobby.gameState.players[idx]);
+            }
+            lobby.gameState.ordem_jogada = newOrder;
+          }
         }
         
-        // Reset the round_over_timestamp
+        // Reset the round_over_timestamp 
         lobby.gameState.round_over_timestamp = undefined;
-        
-        // Save the updated lobby
-        await setLobby(lobby);
       }
     }
     
+    // Only save the lobby if we actually changed something
+    if (shouldUpdateLobby) {
+      await setLobby(lobby);
+      
+      // Emit the updated game state via WebSockets if available
+      try {
+        // @ts-ignore - NextJS doesn't have type definitions for socket.server.io
+        const io = res.socket?.server?.io;
+        if (io) {
+          console.log(`Emitting game state update for game ${id} via socket.io`);
+          io.to(id as string).emit('game-state-update', { gameState: lobby.gameState });
+        }
+      } catch (error) {
+        console.error('Error emitting socket event:', error);
+      }
+    }
+    
+    // Generate a simple ETag based on game state
+    const etag = `"${Buffer.from(JSON.stringify(lobby.gameState)).toString('base64').substring(0, 16)}"`;
+    
+    // Save last processed request information
+    lastProcessedRequests.set(requestKey, { 
+      timestamp: Date.now(),
+      etag
+    });
+    
+    // Set cache-related headers
+    res.setHeader('ETag', etag);
+    res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    
     return res.status(200).json({ status: 'success', game_state: lobby.gameState });
   } catch (error) {
-    console.error(`Error processing game state for ID ${id}:`, error);
+    console.error(`Error in game-state handler for game ${id}:`, error);
     return res.status(500).json({ 
       status: 'error', 
-      error: 'Server error processing game state',
-      code: 'SERVER_ERROR',
-      gameId: id
+      error: 'Server error - please try again later',
+      message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 } 
