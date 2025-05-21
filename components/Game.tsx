@@ -187,9 +187,9 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
             setRoundEndMessage(null);
           }, 2000);
         }
-        
-        // Check for round changes
-        if (prevRound !== null && 
+          
+          // Check for round changes
+          if (prevRound !== null && 
             newGameState?.current_round !== prevRound) {
           // Round has changed - either within same hand or new hand
           if (newGameState?.current_hand === prevHand) {
@@ -230,20 +230,20 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
             setWinnerMessage(`${winnerName} won the round!`);
             setNotificationType('gameState');
           }
-          setPrevRoundWinner(roundWinner);
+            setPrevRoundWinner(roundWinner);
           setLastWinnerMessageTime(Date.now());
-          
+            
           // Clear the message after 1.5 seconds
-          setTimeout(() => {
-            setWinnerMessage(null);
+            setTimeout(() => {
+              setWinnerMessage(null);
           }, 1500);
-        }
-        
-        // Update game state
-        setGameState(newGameState);
-        updateGameStatus(newGameState);
-        
-        // Save current round and hand to detect changes
+          }
+          
+          // Update game state
+          setGameState(newGameState);
+          updateGameStatus(newGameState);
+          
+          // Save current round and hand to detect changes
         setPrevRound(newGameState?.current_round || null);
         setPrevHand(newGameState?.current_hand || null);
         
@@ -388,6 +388,18 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
       joinGameRoom();
     });
 
+    // Handle heartbeat requests from server
+    socket.on('heartbeat', ({timestamp}) => {
+      // Immediately respond to keep the connection alive
+      socket.emit('heartbeat-response', {timestamp});
+    });
+    
+    // Handle welcome message from server
+    socket.on('welcome', (data) => {
+      console.log(`Connected to server with ID: ${data.id}`);
+      setLastSocketActivity(Date.now());
+    });
+
     // Initial game state fetch
     const fetchInitialGameState = async () => {
       try {
@@ -420,6 +432,59 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
     };
     
     fetchInitialGameState();
+    
+    // Additional connection monitoring
+    useEffect(() => {
+      const connectionMonitor = setInterval(() => {
+        const now = Date.now();
+        // If no socket activity for more than 15 seconds, consider connection potentially stale
+        if (now - lastSocketActivity > 15000) {
+          // Check if socket is connected
+          if (socket && !socket.connected) {
+            console.log('Connection appears stale, attempting reconnect...');
+            // Attempt reconnection if socket is defined
+            socket.connect();
+            
+            // If we have game data, try to re-join the game room
+            if (gameId && playerId) {
+              setTimeout(() => {
+                socket.emit('reconnect-attempt', { gameId, playerId });
+              }, 1000);
+            }
+          }
+        }
+      }, 5000);
+      
+      return () => {
+        clearInterval(connectionMonitor);
+      };
+    }, [socket, lastSocketActivity, gameId, playerId]);
+    
+      // Reduce API polling frequency when inactive to save resources
+  const [pollingInterval, setPollingInterval] = useState<number>(2000);
+  
+  useEffect(() => {
+    const inactivityCheck = setInterval(() => {
+      const now = Date.now();
+      // If user has been inactive for over 60 seconds
+      if (now - lastActivityTime > 60000) {
+        // Increase polling interval to save resources
+        if (pollingInterval < 4000) {
+          console.log('User inactive, reducing polling frequency');
+          setPollingInterval(5000);
+        }
+      } else {
+        // Reset to normal polling interval when active
+        if (pollingInterval > 2000) {
+          setPollingInterval(2000);
+        }
+      }
+    }, 10000);
+    
+    return () => {
+      clearInterval(inactivityCheck);
+    };
+  }, [lastActivityTime, pollingInterval]);
     
     // Clean up listeners when component unmounts
     return () => {
@@ -604,20 +669,20 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
             setWaitingMsg('');
           }
         } else {
-          const roundWinner = state.last_round_winner || state.last_trick_winner;
-          if (roundWinner) {
-            const winnerName = state.player_names[roundWinner];
-            setGameStatus(`Round ${state.current_round} complete! ${winnerName} won this round.`);
+        const roundWinner = state.last_round_winner || state.last_trick_winner;
+        if (roundWinner) {
+          const winnerName = state.player_names[roundWinner];
+          setGameStatus(`Round ${state.current_round} complete! ${winnerName} won this round.`);
             setNotificationType('gameState');
-            
-            // The next player to play is after the dealer (not the round winner)
-            if (state.dealer && state.first_player) {
+          
+          // The next player to play is after the dealer (not the round winner)
+          if (state.dealer && state.first_player) {
               setWaitingMsg('');
-            } else {
-              setWaitingMsg('');
-            }
           } else {
-            setGameStatus(`Round ${state.current_round} complete!`);
+              setWaitingMsg('');
+          }
+        } else {
+          setGameStatus(`Round ${state.current_round} complete!`);
             setWaitingMsg('');
             setNotificationType('gameState');
           }
@@ -654,16 +719,16 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
     } else if (state.estado === 'terminado') {
       // Only set game over state once to prevent flashing
       if (prevEstado !== 'terminado') {
-        const winners = state.players.filter(p => !state.eliminados?.includes(p));
-        if (winners.length === 1) {
-          const winner = winners[0];
-          setGameStatus(`Game over! ${state.player_names[winner]} won!`);
+      const winners = state.players.filter(p => !state.eliminados?.includes(p));
+      if (winners.length === 1) {
+        const winner = winners[0];
+        setGameStatus(`Game over! ${state.player_names[winner]} won!`);
           setNotificationType('gameState');
-        } else {
-          setGameStatus('Game over!');
+      } else {
+        setGameStatus('Game over!');
           setNotificationType('gameState');
-        }
-        setWaitingMsg('');
+      }
+      setWaitingMsg('');
       }
     }
   };
@@ -672,7 +737,7 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
   const startRound = async () => {
     try {
       await debounceAction('start-round', async () => {
-        setError('');
+      setError('');
         console.log(`Player ${playerId} attempting to start new round`);
         
         if (socket && socket.connected) {
@@ -687,25 +752,25 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
         // Add cache-busting parameter
         const cacheParam = Math.random().toString(36).substring(7);
         const response = await fetch(`/api/start-round/${gameId}?_=${cacheParam}`, {
-          method: 'POST',
+        method: 'POST',
           headers: {
             'Cache-Control': 'no-cache, no-store, must-revalidate'
           }
-        });
+      });
         
         if (!response.ok) {
           throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
         }
         
-        const data = await response.json();
-        
-        if (data.status === 'success') {
+      const data = await response.json();
+      
+      if (data.status === 'success') {
           console.log("New round started successfully");
-          setGameState(data.game_state);
-          updateGameStatus(data.game_state);
-        } else {
+        setGameState(data.game_state);
+        updateGameStatus(data.game_state);
+      } else {
           throw new Error(data.error || 'Error starting round');
-        }
+      }
       });
     } catch (error) {
       console.error('Error starting round:', error);
@@ -724,7 +789,7 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
     try {
       // Use shorter debounce for better responsiveness
       await debounceAction(`bet-${playerId}`, async () => {
-        setError('');
+      setError('');
         console.log(`Player ${playerId} attempting to place bet: ${betValue}`);
         
         if (socket && socket.connected) {
@@ -757,16 +822,16 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
             // Add cache-busting parameter
             const cacheParam = Math.random().toString(36).substring(7);
             const response = await fetch(`/api/make-bet/${gameId}?_=${cacheParam}`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
                 'Cache-Control': 'no-cache, no-store, must-revalidate'
-              },
-              body: JSON.stringify({ 
-                player_id: playerId, 
+        },
+        body: JSON.stringify({ 
+          player_id: playerId, 
                 bet: betValue
-              }),
-            });
+        }),
+      });
             
             // Handle rate limit (429) by waiting and retrying automatically
             if (response.status === 429) {
@@ -784,20 +849,20 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
               throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
             }
             
-            const data = await response.json();
-            
-            if (data.status === 'success') {
+      const data = await response.json();
+      
+      if (data.status === 'success') {
               console.log("Bet placed successfully");
-              setGameState(data.game_state);
-              updateGameStatus(data.game_state);
-              setBet('');
+        setGameState(data.game_state);
+        updateGameStatus(data.game_state);
+        setBet('');
               
               // Clear pending actions
               setPendingActions(new Set());
               
               // Mark as successful to exit the retry loop
               success = true;
-            } else {
+      } else {
               throw new Error(data.error || 'Error making bet');
             }
           } catch (error) {
@@ -835,11 +900,11 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
     setClickedCardIndex(cardIndex);
     
     // Preemptively apply visual cues for card play
-    const cardToPlay = gameState?.maos?.[playerId]?.[cardIndex];
-    if (cardToPlay) {
-      setLastPlayedCard({ playerId, card: cardToPlay });
-    }
-    
+      const cardToPlay = gameState?.maos?.[playerId]?.[cardIndex];
+      if (cardToPlay) {
+        setLastPlayedCard({ playerId, card: cardToPlay });
+      }
+      
     try {
       // Reduce debounce delay for multi-card hands for better responsiveness
       const debounceDelay = gameState?.cartas && gameState.cartas > 2 ? 200 : 300;
@@ -879,16 +944,16 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
             // Add cache-busting parameter
             const cacheParam = Math.random().toString(36).substring(7);
             const response = await fetch(`/api/play-card/${gameId}?_=${cacheParam}`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
                 'Cache-Control': 'no-cache, no-store, must-revalidate'
-              },
-              body: JSON.stringify({ 
-                player_id: playerId, 
-                card_index: cardIndex 
-              }),
-            });
+        },
+        body: JSON.stringify({ 
+          player_id: playerId, 
+          card_index: cardIndex 
+        }),
+      });
             
             // Handle rate limit (429) by waiting and retrying automatically
             if (response.status === 429) {
@@ -906,19 +971,19 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
               throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
             }
             
-            const data = await response.json();
-            
-            if (data.status === 'success') {
+      const data = await response.json();
+      
+      if (data.status === 'success') {
               console.log("Card played successfully");
-              setGameState(data.game_state);
-              updateGameStatus(data.game_state);
-              
+        setGameState(data.game_state);
+        updateGameStatus(data.game_state);
+        
               // Clear pending actions
               setPendingActions(new Set());
               
               // Mark as successful to exit the retry loop
               success = true;
-            } else {
+      } else {
               throw new Error(data.error || 'Error playing card');
             }
           } catch (error) {
@@ -938,7 +1003,7 @@ export default function Game({ gameId, playerId, onLeaveGame }: GameProps) {
     } finally {
       // Clear last played card indication after animation time
       setTimeout(() => {
-        setLastPlayedCard(null);
+      setLastPlayedCard(null);
       }, 800);
       
       // Reset state after a shorter delay for better responsiveness

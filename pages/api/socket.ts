@@ -1,4 +1,4 @@
-import { Server } from 'socket.io';
+import { Server, Socket } from 'socket.io';
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getLobby, setLobby } from './persistent-store';
 
@@ -10,13 +10,18 @@ const activeGames: Map<string, Map<number, string>> = new Map();
 setInterval(() => {
   const now = Date.now();
   activeConnections.forEach((timestamp, socketId) => {
-    if (now - timestamp > 5 * 60 * 1000) { // 5 minutes
+    if (now - timestamp > 10 * 60 * 1000) { // 10 minutes
       activeConnections.delete(socketId);
     }
   });
-}, 60000);
+}, 120000);
 
 const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
+  if (req.method !== 'GET') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
   if ((res.socket as any).server.io) {
     console.log('Socket already running');
     res.end();
@@ -25,38 +30,47 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
 
   console.log('Setting up socket.io server');
   const io = new Server((res.socket as any).server, {
+    path: '/api/socket-io',
+    addTrailingSlash: false,
     pingTimeout: 60000,
     pingInterval: 25000,
     cookie: false,
     cors: {
       origin: "*",
-      methods: ["GET", "POST"]
+      methods: ["GET", "POST"],
+      credentials: true
     },
-    // Increase reconnection attempts and timeouts
-    reconnectionAttempts: 5,
-    reconnectionDelay: 1000,
-    reconnectionDelayMax: 5000,
-    // Reduce connection timeouts
-    connectTimeout: 10000
+    // Server-side connection timeout
+    connectTimeout: 10000,
+    // Transports - start with polling, then upgrade to websocket
+    transports: ['polling', 'websocket'],
+    // Allow upgrading from polling to websocket
+    allowUpgrades: true,
+    // Additional performance settings
+    perMessageDeflate: {
+      threshold: 1024, // Only compress messages larger than 1KB
+    },
+    maxHttpBufferSize: 1e6, // 1MB
   });
   (res.socket as any).server.io = io;
 
   // Track ongoing actions to prevent duplicates
   const ongoingActions: Map<string, number> = new Map();
   
-  // Clean up stale actions periodically
+  // Clean up stale actions more frequently
   setInterval(() => {
     const now = Date.now();
     ongoingActions.forEach((timestamp, key) => {
-      if (now - timestamp > 10000) { // Remove after 10 seconds
+      if (now - timestamp > 5000) { // Remove after 5 seconds
         ongoingActions.delete(key);
       }
     });
-  }, 30000);
+  }, 15000);
 
   io.on('connection', socket => {
     console.log(`Socket connected: ${socket.id}`);
     activeConnections.set(socket.id, Date.now());
+    socket.emit('welcome', { id: socket.id, time: Date.now() });
     
     // Create a throttle mechanism for this socket
     const socketThrottle: Map<string, number> = new Map();
@@ -76,11 +90,20 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
     };
 
     // Add custom properties to socket
-    interface CustomSocket extends ReturnType<Server['sockets']['sockets'][0]> {
+    interface CustomSocket extends Socket {
       gameId?: string;
       playerId?: number;
     }
     const typedSocket = socket as CustomSocket;
+
+    // Heartbeat to detect connection issues faster
+    const heartbeatInterval = setInterval(() => {
+      if (socket.connected) {
+        socket.emit('heartbeat', { timestamp: Date.now() });
+      } else {
+        clearInterval(heartbeatInterval);
+      }
+    }, 30000);
 
     // Join a game room
     socket.on('join-game', async ({ gameId, playerId, playerName }: { gameId: string, playerId: number, playerName: string }) => {
@@ -200,6 +223,7 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
     socket.on('disconnect', () => {
       console.log(`Socket disconnected: ${socket.id}`);
       activeConnections.delete(socket.id);
+      clearInterval(heartbeatInterval);
       
       // Remove this socket from the active games tracking
       if (typedSocket.gameId && typedSocket.playerId) {
@@ -284,9 +308,27 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
         socket.emit('error', { message: 'Failed to reconnect to game' });
       }
     });
+
+    // Handle heartbeat responses
+    socket.on('heartbeat-response', ({ timestamp }: { timestamp: number }) => {
+      const roundTripTime = Date.now() - timestamp;
+      // If round trip is over 1000ms, connection might be degrading
+      if (roundTripTime > 1000) {
+        console.log(`High latency detected for ${socket.id}: ${roundTripTime}ms`);
+      }
+      // Update last activity time
+      activeConnections.set(socket.id, Date.now());
+    });
   });
 
   res.end();
 };
 
-export default SocketHandler; 
+export default SocketHandler;
+
+// API route configuration for WebSockets
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};

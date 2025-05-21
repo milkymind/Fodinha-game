@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
-import styles from '../styles/Home.module.css';
+import Head from 'next/head';
 import Game from '../components/Game';
+import styles from '../styles/Home.module.css';
 
 interface LobbyInfo {
-  players: { id: number; name: string }[];
+  players: string[];
   maxPlayers: number;
-  lives: number;
+  gameStarted: boolean;
 }
 
 export default function Home() {
@@ -17,11 +18,55 @@ export default function Home() {
   const [lives, setLives] = useState<number>(3);
   const [lobbyInfo, setLobbyInfo] = useState<LobbyInfo | null>(null);
   const [gameStarted, setGameStarted] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isOffline, setIsOffline] = useState<boolean>(false);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js')
+        .then(registration => {
+          console.log('Service Worker registered with scope:', registration.scope);
+        })
+        .catch(error => {
+          console.error('Service Worker registration failed:', error);
+        });
+    }
+
+    const handleOffline = () => {
+      setIsOffline(true);
+      setError('You are currently offline. Some features may be limited.');
+    };
+
+    const handleOnline = () => {
+      setIsOffline(false);
+      setError('');
+    };
+
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+
+    setIsOffline(!navigator.onLine);
+
+    return () => {
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, []);
 
   const createGame = async () => {
     try {
       setError('');
+      setIsLoading(true);
+      
+      if (!playerName.trim()) {
+        setError('Please enter a player name');
+        setIsLoading(false);
+        return;
+      }
+      
+      localStorage.setItem('playerName', playerName);
+      
       const response = await fetch('/api/create-game', {
         method: 'POST',
         headers: {
@@ -32,6 +77,11 @@ export default function Home() {
           lives: lives 
         }),
       });
+      
+      if (!response.ok) {
+        throw new Error(`Server responded with status: ${response.status}`);
+      }
+      
       const data = await response.json();
       if (data.status === 'success') {
         setGameId(data.game_id);
@@ -43,13 +93,31 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Error creating game:', error);
-      setError('Failed to connect to the game server');
+      setError('Failed to connect to the game server. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const joinGame = async (id: string) => {
     try {
       setError('');
+      setIsLoading(true);
+      
+      if (!playerName.trim()) {
+        setError('Please enter a player name');
+        setIsLoading(false);
+        return;
+      }
+      
+      if (!id.trim()) {
+        setError('Please enter a game ID');
+        setIsLoading(false);
+        return;
+      }
+      
+      localStorage.setItem('playerName', playerName);
+      
       const response = await fetch(`/api/join-game/${id}`, {
         method: 'POST',
         headers: {
@@ -57,6 +125,11 @@ export default function Home() {
         },
         body: JSON.stringify({ player_name: playerName }),
       });
+      
+      if (!response.ok) {
+        throw new Error(`Server responded with status: ${response.status}`);
+      }
+      
       const data = await response.json();
       if (data.status === 'success') {
         setPlayerId(data.player_id);
@@ -68,7 +141,9 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Error joining game:', error);
-      setError('Failed to connect to the game server');
+      setError('Failed to connect to the game server. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -85,12 +160,23 @@ export default function Home() {
     }
   };
 
-  // Poll lobby info every 2 seconds if in a lobby and game not started
+  useEffect(() => {
+    const savedName = localStorage.getItem('playerName');
+    if (savedName) {
+      setPlayerName(savedName);
+    }
+  }, []);
+
   useEffect(() => {
     if (gameId && playerId && !gameStarted) {
       const poll = async () => {
         try {
           const response = await fetch(`/api/lobby-info/${gameId}`);
+          if (!response.ok) {
+            console.warn(`Lobby polling failed with status: ${response.status}`);
+            return;
+          }
+          
           const data = await response.json();
           if (data.status === 'success') {
             setLobbyInfo(data.lobby);
@@ -99,9 +185,10 @@ export default function Home() {
             }
           }
         } catch (e) {
-          // ignore
+          console.warn('Lobby polling error:', e);
         }
       };
+      
       poll();
       pollingRef.current = setInterval(poll, 2000);
       return () => {
@@ -110,153 +197,123 @@ export default function Home() {
     }
   }, [gameId, playerId, gameStarted]);
 
-  // Start game handler (host only)
-  const handleStartGame = async () => {
-    if (!gameId) return;
-    try {
-      const response = await fetch(`/api/start-game/${gameId}`, {
-        method: 'POST',
-      });
-      const data = await response.json();
-      if (data.status === 'success') {
-        setGameStarted(true);
-      } else {
-        setError(data.error || 'Failed to start game');
-      }
-    } catch (e) {
-      setError('Failed to start game');
-    }
-  };
-
-  // Show Game component if started
-  if ((gameId && playerId) && gameStarted) {
-    return (
-      <Game
-        gameId={gameId}
-        playerId={playerId}
-        onLeaveGame={handleLeaveGame}
-      />
-    );
-  }
-
-  // Show lobby info if in a lobby but before game starts
-  if ((gameId && playerId) && lobbyInfo) {
-    const isHost = lobbyInfo.players[0]?.id === playerId;
-    return (
-      <div className={styles.container}>
-        <h2>Lobby: {gameId}</h2>
-        <div className={styles.section}>
-          <h3>Players ({lobbyInfo.players.length} / {lobbyInfo.maxPlayers})</h3>
-          <ul style={{ listStyle: 'none', padding: 0 }}>
-            {lobbyInfo.players.map((p) => (
-              <li key={p.id} style={{ fontWeight: p.id === playerId ? 'bold' : 'normal' }}>
-                {p.name} {p.id === playerId ? '(You)' : ''}
-              </li>
-            ))}
-          </ul>
-          <p>Lives per player: <b>{lobbyInfo.lives}</b></p>
-          <p>Share this lobby code with friends to join: <b>{gameId}</b></p>
-          {isHost && (
-            <button className={styles.button} onClick={handleStartGame} disabled={lobbyInfo.players.length < 2}>
-              Start Game
-            </button>
-          )}
-          <button className={styles.button} onClick={handleLeaveGame}>Leave Lobby</button>
-          {isHost && lobbyInfo.players.length < 2 && (
-            <p style={{ color: 'red', marginTop: 8 }}>At least 2 players are required to start.</p>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className={styles.container}>
-      <h1 className={styles.title}>Fodinha Card Game</h1>
-      {error && (
-        <div className={styles.error}>
-          {error}
-        </div>
-      )}
-      <div className={styles.section}>
-        <h2>Join or Create a Game</h2>
-        <div className={styles.inputGroup}>
-          <input
-            type="text"
-            placeholder="Your Name"
-            value={playerName}
-            onChange={(e) => setPlayerName(e.target.value)}
-            className={styles.input}
-          />
-        </div>
-        <div className={styles.livesSelection}>
-          <h3>Select Lives (for new game)</h3>
-          <div className={styles.livesOptions}>
-            <button 
-              onClick={() => setLives(3)} 
-              className={`${styles.livesButton} ${lives === 3 ? styles.selected : ''}`}
-            >
-              3 Lives
-            </button>
-            <button 
-              onClick={() => setLives(5)} 
-              className={`${styles.livesButton} ${lives === 5 ? styles.selected : ''}`}
-            >
-              5 Lives
-            </button>
-            <button 
-              onClick={() => setLives(7)} 
-              className={`${styles.livesButton} ${lives === 7 ? styles.selected : ''}`}
-            >
-              7 Lives
-            </button>
-          </div>
-        </div>
+      <Head>
+        <title>Fodinha Card Game</title>
+        <meta name="description" content="Play the traditional Brazilian card game Fodinha online with friends" />
+        <link rel="icon" href="/favicon.ico" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+      </Head>
 
-        <div className={styles.buttonsGroup}>
-          <button
-            onClick={createGame}
-            className={styles.button}
-            disabled={!playerName}
-          >
-            Create New Game
-          </button>
-        </div>
-        
-        <div className={styles.joinSection}>
-          <h3>Join Existing Game</h3>
-          <div className={styles.inputGroup}>
-            <input
-              type="text"
-              placeholder="Game ID"
-              value={joinGameId}
-              onChange={(e) => setJoinGameId(e.target.value)}
-              className={styles.input}
-            />
-            <button
-              onClick={() => joinGame(joinGameId)}
-              className={styles.button}
-              disabled={!joinGameId || !playerName}
-            >
-              Join Game
-            </button>
+      <main className={styles.main}>
+        {gameStarted && playerId !== null ? (
+          <Game 
+            gameId={gameId} 
+            playerId={playerId} 
+            onLeaveGame={handleLeaveGame} 
+          />
+        ) : (
+          <div className={styles.homeContent}>
+            <h1 className={styles.title}>
+              Fodinha Card Game
+            </h1>
+            
+            {isOffline && (
+              <div className={styles.offlineWarning}>
+                You are currently offline. Limited functionality available.
+              </div>
+            )}
+
+            {error && <p className={styles.error}>{error}</p>}
+            
+            {gameId ? (
+              <div className={styles.lobby}>
+                <h2>Game Room: {gameId}</h2>
+                {lobbyInfo && (
+                  <div className={styles.lobbyInfo}>
+                    <p>Players: {lobbyInfo.players.length}/{lobbyInfo.maxPlayers}</p>
+                    <ul className={styles.playerList}>
+                      {lobbyInfo.players.map((player, index) => (
+                        <li key={index}>{player} {index === 0 ? '(Host)' : ''}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <button 
+                  className={styles.button} 
+                  onClick={handleLeaveGame}
+                  disabled={isLoading}
+                >
+                  Leave Game
+                </button>
+              </div>
+            ) : (
+              <div className={styles.formContainer}>
+                <div className={styles.inputGroup}>
+                  <label htmlFor="playerName">Your Name:</label>
+                  <input
+                    id="playerName"
+                    type="text"
+                    value={playerName}
+                    onChange={(e) => setPlayerName(e.target.value)}
+                    placeholder="Enter your name"
+                    className={styles.input}
+                    maxLength={20}
+                  />
+                </div>
+                
+                <div className={styles.inputGroup}>
+                  <label htmlFor="lives">Starting Lives:</label>
+                  <select
+                    id="lives"
+                    value={lives}
+                    onChange={(e) => setLives(parseInt(e.target.value))}
+                    className={styles.input}
+                  >
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                  </select>
+                </div>
+                
+                <button 
+                  className={styles.button} 
+                  onClick={createGame}
+                  disabled={isLoading || isOffline}
+                >
+                  {isLoading ? 'Creating...' : 'Create New Game'}
+                </button>
+                
+                <div className={styles.divider}>or</div>
+                
+                <div className={styles.inputGroup}>
+                  <label htmlFor="joinGameId">Join Existing Game:</label>
+                  <input
+                    id="joinGameId"
+                    type="text"
+                    value={joinGameId}
+                    onChange={(e) => setJoinGameId(e.target.value.toUpperCase())}
+                    placeholder="Enter Game ID"
+                    className={styles.input}
+                    maxLength={6}
+                  />
+                </div>
+                
+                <button 
+                  className={styles.button} 
+                  onClick={() => joinGame(joinGameId)}
+                  disabled={isLoading || !joinGameId || isOffline}
+                >
+                  {isLoading ? 'Joining...' : 'Join Game'}
+                </button>
+              </div>
+            )}
           </div>
-        </div>
-      </div>
-      {gameId && !playerId && (
-        <div className={styles.section}>
-          <h2>Game Created!</h2>
-          <p>Your Game ID: {gameId}</p>
-          <p>Share this ID with your friends to let them join.</p>
-          <button
-            onClick={() => joinGame(gameId)}
-            className={styles.button}
-            disabled={!playerName}
-          >
-            Join Your Game
-          </button>
-        </div>
-      )}
+        )}
+      </main>
     </div>
   );
 } 
