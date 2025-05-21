@@ -6,7 +6,7 @@ import { getLobby, setLobby } from './persistent-store';
 const activeConnections: Map<string, number> = new Map();
 const activeGames: Map<string, Map<number, string>> = new Map();
 
-  // Clean up stale connections periodically
+// Clean up stale connections periodically
 setInterval(() => {
   const now = Date.now();
   activeConnections.forEach((timestamp, socketId) => {
@@ -17,6 +17,11 @@ setInterval(() => {
 }, 120000);
 
 const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
+  if (req.method !== 'GET') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
   if ((res.socket as any).server.io) {
     console.log('Socket already running');
     res.end();
@@ -32,29 +37,40 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
     cookie: false,
     cors: {
       origin: "*",
-      methods: ["GET", "POST"]
+      methods: ["GET", "POST"],
+      credentials: true
     },
     // Server-side connection timeout
-    connectTimeout: 10000
+    connectTimeout: 10000,
+    // Transports - prefer websocket, fall back to polling
+    transports: ['websocket', 'polling'],
+    // Allow upgrading from polling to websocket
+    allowUpgrades: true,
+    // Additional performance settings
+    perMessageDeflate: {
+      threshold: 1024, // Only compress messages larger than 1KB
+    },
+    maxHttpBufferSize: 1e6, // 1MB
   });
   (res.socket as any).server.io = io;
 
   // Track ongoing actions to prevent duplicates
   const ongoingActions: Map<string, number> = new Map();
   
-  // Clean up stale actions periodically
+  // Clean up stale actions more frequently
   setInterval(() => {
     const now = Date.now();
     ongoingActions.forEach((timestamp, key) => {
-      if (now - timestamp > 10000) { // Remove after 10 seconds
+      if (now - timestamp > 5000) { // Remove after 5 seconds
         ongoingActions.delete(key);
       }
     });
-  }, 30000);
+  }, 15000);
 
   io.on('connection', socket => {
     console.log(`Socket connected: ${socket.id}`);
     activeConnections.set(socket.id, Date.now());
+    socket.emit('welcome', { id: socket.id, time: Date.now() });
     
     // Create a throttle mechanism for this socket
     const socketThrottle: Map<string, number> = new Map();
@@ -79,6 +95,15 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
       playerId?: number;
     }
     const typedSocket = socket as CustomSocket;
+
+    // Heartbeat to detect connection issues faster
+    const heartbeatInterval = setInterval(() => {
+      if (socket.connected) {
+        socket.emit('heartbeat', { timestamp: Date.now() });
+      } else {
+        clearInterval(heartbeatInterval);
+      }
+    }, 30000);
 
     // Join a game room
     socket.on('join-game', async ({ gameId, playerId, playerName }: { gameId: string, playerId: number, playerName: string }) => {
@@ -198,6 +223,7 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
     socket.on('disconnect', () => {
       console.log(`Socket disconnected: ${socket.id}`);
       activeConnections.delete(socket.id);
+      clearInterval(heartbeatInterval);
       
       // Remove this socket from the active games tracking
       if (typedSocket.gameId && typedSocket.playerId) {
@@ -281,6 +307,17 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
         console.error(`Error in reconnect-attempt handler:`, error);
         socket.emit('error', { message: 'Failed to reconnect to game' });
       }
+    });
+
+    // Handle heartbeat responses
+    socket.on('heartbeat-response', ({ timestamp }: { timestamp: number }) => {
+      const roundTripTime = Date.now() - timestamp;
+      // If round trip is over 1000ms, connection might be degrading
+      if (roundTripTime > 1000) {
+        console.log(`High latency detected for ${socket.id}: ${roundTripTime}ms`);
+      }
+      // Update last activity time
+      activeConnections.set(socket.id, Date.now());
     });
   });
 

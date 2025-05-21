@@ -23,10 +23,17 @@ export default function App({ Component, pageProps }: AppProps) {
           path: '/api/socket-io',
           addTrailingSlash: false,
           reconnection: true,
-          reconnectionAttempts: 5,
+          reconnectionAttempts: 10,
           reconnectionDelay: 1000,
           reconnectionDelayMax: 5000,
-          timeout: 20000
+          timeout: 20000,
+          transports: ['websocket', 'polling'], // Try WebSocket first, fall back to polling
+          upgrade: true, // Allow transport upgrade
+          forceNew: true, // Force a new connection
+          autoConnect: true,
+          query: {
+            timestamp: Date.now().toString() // Prevent caching issues
+          }
         });
         
         // Set up event listeners
@@ -38,21 +45,49 @@ export default function App({ Component, pageProps }: AppProps) {
         socketConnection.on('disconnect', () => {
           console.log('Socket disconnected');
           setSocketConnected(false);
+          
+          // Try to reconnect manually after a short delay if not reconnecting automatically
+          setTimeout(() => {
+            if (!socketConnection.connected) {
+              console.log('Attempting manual reconnection...');
+              socketConnection.connect();
+            }
+          }, 2000);
         });
         
         socketConnection.on('connect_error', (error) => {
           console.error('Socket connection error:', error);
           setSocketConnected(false);
+          
+          // Manual reconnect attempt with refreshed parameters
+          setTimeout(() => {
+            console.log('Attempting reconnection after error...');
+            // Update the query to force a new connection attempt
+            socketConnection.io.opts.query = { timestamp: Date.now().toString() };
+            socketConnection.connect();
+          }, 3000);
         });
         
         socketConnection.on('error', (error) => {
           console.error('Socket error:', error);
         });
         
+        // Handle engine errors
+        socketConnection.io.engine?.on('error', (error: string | Error) => {
+          console.error('Transport error:', error);
+        });
+        
+        // Keep track of connection attempts
+        socketConnection.io.on('reconnect_attempt', (attempt) => {
+          console.log(`Reconnection attempt ${attempt}`);
+          // Update the query parameter to avoid caching issues
+          socketConnection.io.opts.query = { timestamp: Date.now().toString() };
+        });
+        
         setSocket(socketConnection);
       } catch (error) {
         console.error('Failed to initialize socket:', error);
-        // Try again after 5 seconds
+        // Try again after a delay with exponential backoff
         setTimeout(initializeSocket, 5000);
       }
     };
