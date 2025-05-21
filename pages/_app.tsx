@@ -20,9 +20,12 @@ export default function App({ Component, pageProps }: AppProps) {
         
         // Connect to the socket server with auto reconnection
         const socketConnection = io({
+          path: '/api/socket-io',
+          addTrailingSlash: false,
           reconnection: true,
           reconnectionAttempts: 5,
           reconnectionDelay: 1000,
+          reconnectionDelayMax: 5000,
           timeout: 20000
         });
         

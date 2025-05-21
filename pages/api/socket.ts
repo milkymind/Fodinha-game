@@ -1,4 +1,4 @@
-import { Server } from 'socket.io';
+import { Server, Socket } from 'socket.io';
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getLobby, setLobby } from './persistent-store';
 
@@ -6,15 +6,15 @@ import { getLobby, setLobby } from './persistent-store';
 const activeConnections: Map<string, number> = new Map();
 const activeGames: Map<string, Map<number, string>> = new Map();
 
-// Clean up stale connections periodically
+  // Clean up stale connections periodically
 setInterval(() => {
   const now = Date.now();
   activeConnections.forEach((timestamp, socketId) => {
-    if (now - timestamp > 5 * 60 * 1000) { // 5 minutes
+    if (now - timestamp > 10 * 60 * 1000) { // 10 minutes
       activeConnections.delete(socketId);
     }
   });
-}, 60000);
+}, 120000);
 
 const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
   if ((res.socket as any).server.io) {
@@ -25,6 +25,8 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
 
   console.log('Setting up socket.io server');
   const io = new Server((res.socket as any).server, {
+    path: '/api/socket-io',
+    addTrailingSlash: false,
     pingTimeout: 60000,
     pingInterval: 25000,
     cookie: false,
@@ -32,11 +34,7 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
       origin: "*",
       methods: ["GET", "POST"]
     },
-    // Increase reconnection attempts and timeouts
-    reconnectionAttempts: 5,
-    reconnectionDelay: 1000,
-    reconnectionDelayMax: 5000,
-    // Reduce connection timeouts
+    // Server-side connection timeout
     connectTimeout: 10000
   });
   (res.socket as any).server.io = io;
@@ -76,7 +74,7 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
     };
 
     // Add custom properties to socket
-    interface CustomSocket extends ReturnType<Server['sockets']['sockets'][0]> {
+    interface CustomSocket extends Socket {
       gameId?: string;
       playerId?: number;
     }
@@ -289,4 +287,11 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
   res.end();
 };
 
-export default SocketHandler; 
+export default SocketHandler;
+
+// API route configuration for WebSockets
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};

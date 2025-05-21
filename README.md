@@ -15,6 +15,13 @@ Predict the number of **tricks** (round wins) you'll win each round. Get it wron
 
 ### 🃏 Game Rules
 
+#### ♣️♦️♥️♠️ Card Suits and Order
+- The game uses a **40-card deck** with the following suits: ♣ Clubs, ♥ Hearts, ♠ Spades, ♦ Diamonds
+- **Card Value Order** (lowest to highest): 4, 5, 6, 7, Q, J, K, A, 2, 3
+- **Manilha Cards**: When a card is drawn to determine the manilha, the manilha value is the next card in the sequence (e.g., if 7 is drawn, Q is the manilha value)
+- **Manilha Suit Ranking** (when comparing manilha cards): Clubs (highest), Hearts, Spades, Diamonds (lowest)
+- **Tie-Breaking Suit Ranking** (used only to break ties in final rounds): Clubs (highest), Hearts, Spades, Diamonds (lowest)
+
 #### 🪙 Starting Conditions
 - Each player starts with **3 lives**
 - In round 1, each player receives **1 card**
